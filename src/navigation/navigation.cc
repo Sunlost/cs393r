@@ -131,7 +131,7 @@ void Navigation::Run() {
   // Eventually, you will have to set the control values to issue drive commands:
   // drive_msg_.curvature = ...;
   // drive_msg_.velocity = ...;
-  drive_msg_.velocity = 1;
+  
 
   // Add timestamps to all messages.
   local_viz_msg_.header.stamp = ros::Time::now();
@@ -142,5 +142,19 @@ void Navigation::Run() {
   viz_pub_.publish(global_viz_msg_);
   drive_pub_.publish(drive_msg_);
 }
+
+void move(int x, int y) {
+    // move to coordinates
+    
+    // overall goal: calculate the velocity and curvature needed to get to that coordinate safely
+      // it's just an arc, so there are no obstacles. other parts of code ensured that.
+
+    // calculate velocity
+    // calculate curvature
+    // from: our current position (x, y, angle) and the goal position (x', y').
+
+    // 
+}
+
 
 }  // namespace navigation
