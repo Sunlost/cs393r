@@ -51,6 +51,17 @@ VisualizationMsg global_viz_msg_;
 AckermannCurvatureDriveMsg drive_msg_;
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
+
+float curSpeed;
+float distTraveled;
+float distToGo;
+
+float maxVel;
+float maxAccel;
+float maxDecel;
+
+int cyclesPerSecond;
+
 } //namespace
 
 namespace navigation {
@@ -79,6 +90,20 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   global_viz_msg_ = visualization::NewVisualizationMessage(
       "map", "navigation_global");
   InitRosHeader("base_link", &drive_msg_.header);
+
+  // distance we have travelled so far
+  distTraveled = 0;
+  // distance we want to go. arbitrarily decide this to be 10m to test
+  distToGo = 10;
+
+  // max velocity: 1.0 m/s
+  maxVel = 1.0;
+  // max acceleration: 4.0 m/s^2
+  maxAccel = 4.0;
+  // max deceleration: 4.0 m/s^2
+  maxDecel = -4.0;
+
+  cyclesPerSecond = 20;
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -132,6 +157,7 @@ void Navigation::Run() {
   // drive_msg_.curvature = ...;
   // drive_msg_.velocity = ...;
   
+  toc1dstraightline();
 
   // Add timestamps to all messages.
   local_viz_msg_.header.stamp = ros::Time::now();
@@ -143,17 +169,42 @@ void Navigation::Run() {
   drive_pub_.publish(drive_msg_);
 }
 
-void move(int x, int y) {
-    // move to coordinates
+float Navigation::cyclesToFullyDecelerate(float speed) inline {
+  // accel = (v_f - v_i) / time
+  // time = (v_f - v_i) / accel
+  float timeToDecel = (0 - drive_msg_.velocity) / maxDecel;
+  // num_cycles/sec = 20 cycles per 1 second
+  // num_cycles = num_cycles/sec * time
+  return ceilf(timeToDecel) * 20;
+}
+
+// TODO: maybe we change the return type of this to be an int 1/2/3 to designate what phase we're in
+// and then handle the actual value-setting stuff in a parent function
+
+// TODO: figure out how we work in the (v, ω) space -- our max velocity may be capped <1 when on a sharp curve
+void Navigation::toc1dstraightline() {
+  // if we are at max speed,
+  if(drive_msg_.velocity == 1) {
+    // assume we cruise at max speed for one time step and then decel as fast as possible.
+    // do we go over our desired endpoint?
+    float newLocAfterCruising = (distTraveled + (maxVel / cyclesPerSecond));
+    // v_f^2 = v_i^2 + 2*accel*distance
+    // distance = (v_f^2 - v_i^2) / (2*accel)
+    float newLocAfterDecel = newLocAfterCruising + (0 - pow(drive_msg_.velocity, 2)) / (2 * maxDecel);
+
+    if(newLocAfterDecel > distToGo) return 3; // start decel phase
+    else return 2; // start accel phase
+
+  } else {
+    // assume we accel as much as possible for one time step and then decel as fast as possible.
+    // do we go over our desired endpoint?
     
-    // overall goal: calculate the velocity and curvature needed to get to that coordinate safely
-      // it's just an arc, so there are no obstacles. other parts of code ensured that.
+    // calc how much we can accelerate in 1 cycle (0.05sec)
 
-    // calculate velocity
-    // calculate curvature
-    // from: our current position (x, y, angle) and the goal position (x', y').
+    // calc dist traveled while accelerating
+      // distance = (v_f^2 - v_i^2) / (2*accel)
 
-    // 
+  }
 }
 
 
