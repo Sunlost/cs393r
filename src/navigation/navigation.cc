@@ -33,6 +33,7 @@
 #include "shared/ros/ros_helpers.h"
 #include "navigation.h"
 #include "visualization/visualization.h"
+#include <algorithm>
 
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -53,14 +54,15 @@ AckermannCurvatureDriveMsg drive_msg_;
 const float kEpsilon = 1e-5;
 
 float curSpeed;
-float distTraveled;
-float distToGo;
+float d_curr;
+float d_max;
 
-float maxVel;
-float maxAccel;
-float maxDecel;
+float v_max;
+float a_max;
+float decel_max;
 
-int cyclesPerSecond;
+int cycles_per_second;
+float cycle_time;
 
 } //namespace
 
@@ -91,19 +93,20 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
       "map", "navigation_global");
   InitRosHeader("base_link", &drive_msg_.header);
 
-  // distance we have travelled so far
-  distTraveled = 0;
+  // distance we have travelled so far.
+  d_curr = 0;
   // distance we want to go. arbitrarily decide this to be 10m to test
-  distToGo = 10;
+  d_max = 10;
 
   // max velocity: 1.0 m/s
-  maxVel = 1.0;
+  v_max = 1.0;
   // max acceleration: 4.0 m/s^2
-  maxAccel = 4.0;
+  a_max = 4.0;
   // max deceleration: 4.0 m/s^2
-  maxDecel = -4.0;
+  decel_max = -4.0;
 
-  cyclesPerSecond = 20;
+  cycles_per_second = 20;
+  cycle_time = (float) 1 / cycles_per_second;
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -178,32 +181,77 @@ float Navigation::cyclesToFullyDecelerate(float speed) inline {
   return ceilf(timeToDecel) * 20;
 }
 
-// TODO: maybe we change the return type of this to be an int 1/2/3 to designate what phase we're in
-// and then handle the actual value-setting stuff in a parent function
-
 // TODO: figure out how we work in the (v, ω) space -- our max velocity may be capped <1 when on a sharp curve
+  // might also only be when we set v_max to 2 for the bonus problems, etc. should probably test on real car.
 void Navigation::toc1dstraightline() {
   // if we are at max speed,
-  if(drive_msg_.velocity == 1) {
+  if(drive_msg_.velocity == v_max) {
     // assume we cruise at max speed for one time step and then decel as fast as possible.
     // do we go over our desired endpoint?
-    float newLocAfterCruising = (distTraveled + (maxVel / cyclesPerSecond));
-    // v_f^2 = v_i^2 + 2*accel*distance
-    // distance = (v_f^2 - v_i^2) / (2*accel)
-    float newLocAfterDecel = newLocAfterCruising + (0 - pow(drive_msg_.velocity, 2)) / (2 * maxDecel);
+    float v_i = drive_msg_.velocity;
+    float v_f = 0;
+    
+    // calc total distance travelled if we cruise this cycle
+    // d = vt
+    float d_after_this_cycle = (d_curr + (v_max / cycles_per_second));
 
-    if(newLocAfterDecel > distToGo) return 3; // start decel phase
-    else return 2; // start accel phase
+    // calc total distance travelled in the future if we start decelerating next cycle
+    // v_f^2 = v_i^2 + 2ad
+    // d = (v_f^2 - v_i^2) / (2a)
+    float d_after_decel_to_zero = (v_f - pow(v_i, 2)) / (2 * decel_max)
+                                  + d_after_this_cycle;
 
+    if(d_after_decel_to_zero > d_max) return 3; // decel phase
+    else return 2; // cruise phase
   } else {
     // assume we accel as much as possible for one time step and then decel as fast as possible.
     // do we go over our desired endpoint?
-    
-    // calc how much we can accelerate in 1 cycle (0.05sec)
+    float v_i = drive_msg_.velocity;
 
-    // calc dist traveled while accelerating
-      // distance = (v_f^2 - v_i^2) / (2*accel)
+    // calc our final velocity if we accelerate as much as we can in 1 cycle, up to a cap of v_max
+    // V_f = V_i + at
+    float v_f = v_i + (a_max * cycle_time);
 
+    // distance travelled while accelerating up to v_max
+    float d_accel;
+    // distance travelled at v_max
+    float d_at_max_vel;
+
+    if(v_f <= v_max) {
+      // d_accel = (v_f^2 - v_i^2) / (2a)
+      d_accel = (pow(v_f, 2) - pow(v_i, 2)) / (2 * a_max);
+      // if v_f <= v_max, then d_at_max_vel = 0.
+      d_at_max_vel = 0;
+    } else {
+      // d_accel = (v_f^2 - v_i^2) / (2a)    [in this case, v_f == v_max]
+      d_accel = (pow(v_max, 2) - pow(v_i, 2)) / (2 * a_max);
+
+      // calc time to reach max velocity
+      // V_f = V_i + at    ->    t = (V_f - V_i) / a    [in this case, v_f == v_max]
+      float t_accel = (v_max - v_i) / a_max;
+
+      // we're at max velocity for the remainder of the cycle
+      float t_at_max_vel = cycle_time - t_accel;
+
+      // d_at_max_vel = v * t
+      d_at_max_vel = v_max * t_at_max_vel;
+    }
+
+    // cap our v_f at v_max if v_f > v_max
+    v_f = std::min(v_f, v_max);    
+
+    float d_after_this_cycle = d_curr + d_accel + d_at_max_vel;
+
+    // calc total distance travelled in the future if we start decelerating next cycle
+    // v_f^2 = v_i^2 + 2ad
+    // d = (v_f^2 - v_i^2) / (2a)
+    v_i = v_f;
+    v_f = 0;
+    float d_after_decel_to_zero = (v_f - pow(v_i, 2)) / (2 * decel_max)
+                                  + d_after_this_cycle;
+
+    if(d_after_decel_to_zero > d_max) return 3; // decel phase
+    else return 1; // accel phase
   }
 }
 
