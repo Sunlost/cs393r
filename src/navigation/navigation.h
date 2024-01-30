@@ -67,6 +67,13 @@ class Navigation {
   // Used to set the next target pose.
   void SetNavGoal(const Eigen::Vector2f& loc, float angle);
 
+  // =-=-=-=-=-=-=
+
+  // functions written by us
+
+  // handles all 1dtoc motion. sets velocity.
+  void toc1dstraightline();
+
  private:
 
   // Whether odometry has been initialized.

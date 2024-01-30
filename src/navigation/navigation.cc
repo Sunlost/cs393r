@@ -198,7 +198,6 @@ void Navigation::toc1dstraightline() {
 
       if(d_after_decel_to_zero > d_max) { // handle decel phase at end
         decel_started = true;
-        break;
       } else { // cruise phase
         drive_msg_.velocity = v_max; // redundant
         d_curr = d_after_this_cycle;
@@ -253,7 +252,6 @@ void Navigation::toc1dstraightline() {
 
       if(d_after_decel_to_zero > d_max) { // handle decel phase at end
         decel_started = true;
-        break;
       } else { // accel phase
         drive_msg_.velocity = v_f;
         d_curr = d_after_this_cycle;
@@ -273,7 +271,7 @@ void Navigation::toc1dstraightline() {
   // d = (v_f^2 - v_i^2) / (2a)
   float d = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
 
-  drive_msg_.velocity = v;
+  drive_msg_.velocity = v_f;
   d_curr = d_curr + d;
 
   return;
