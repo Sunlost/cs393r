@@ -34,6 +34,7 @@
 #include "navigation.h"
 #include "visualization/visualization.h"
 #include <algorithm>
+#include <sys/types.h>
 
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -95,7 +96,10 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   InitRosHeader("base_link", &drive_msg_.header);
 
   // decel started flag
-  decel_started = false;
+  // decel_started = false;
+
+  // phase of 1dTOC we are currently in
+  phase = PHASE_ACCEL;
 
   // distance we have travelled so far.
   d_curr = 0;
@@ -163,8 +167,16 @@ void Navigation::Run() {
   // Eventually, you will have to set the control values to issue drive commands:
   // drive_msg_.curvature = ...;
   // drive_msg_.velocity = ...;
+
+
+
+  // invoke curve-generator
+
+  // pass curves into cost function
   
   toc1dstraightline();
+
+
 
   // Add timestamps to all messages.
   local_viz_msg_.header.stamp = ros::Time::now();
@@ -176,103 +188,115 @@ void Navigation::Run() {
   drive_pub_.publish(drive_msg_);
 }
 
-// TODO: figure out how we work in the (v, ω) space -- our max velocity may be capped <1 when on a sharp curve
-  // might also only be when we set v_max to 2 for the bonus problems, etc. should probably test on real car.
+// calculate what phase of ToC we are in, update state
 void Navigation::toc1dstraightline() {
-  if(!decel_started) {
-    if(drive_msg_.velocity == v_max) {
-      // assume we cruise at max speed for one time step and then decel as fast as possible.
-      // do we go over our desired endpoint?
-      float v_i = drive_msg_.velocity;
-      float v_f = 0;
-      
-      // calc total distance travelled if we cruise this cycle
-      // d = vt
-      float d_after_this_cycle = (d_curr + (v_max / cycles_per_second));
+  // formulas used:
+    // v_f = v_i + at
+    // d = (v_f^2 - v_i^2) / (2a)
+    // t = (V_f - V_i) / a
+    // d = vt
 
-      // calc total distance travelled in the future if we start decelerating next cycle
-      // v_f^2 = v_i^2 + 2ad
-      // d = (v_f^2 - v_i^2) / (2a)
-      float d_after_decel_to_zero = (v_f - pow(v_i, 2)) / (2 * decel_max)
-                                    + d_after_this_cycle;
+  // initial velocity
+  float v_i = drive_msg_.velocity; // TODO: get from instance variables, not our previous cycle velocity
+  // final velocity
+  float v_f = 0;
+  // distance we will travel in this cycle
+  float d_this_cycle = 0;
+  // total distance after this cycle ends
+  float d_total_after_this_cycle = 0;
+  // total distance after we fully decel to zero
+  float d_total_after_decel_to_zero = 0;
 
-      if(d_after_decel_to_zero > d_max) { // handle decel phase at end
-        decel_started = true;
-      } else { // cruise phase
-        drive_msg_.velocity = v_max; // redundant
-        d_curr = d_after_this_cycle;
-        return;
-      } 
-    } else {
-      // assume we accel as much as possible for one time step and then decel as fast as possible.
-      // do we go over our desired endpoint?
-      float v_i = drive_msg_.velocity;
+  // 1. reconcile past prediction with actual car movement/velocity
+    // TODO: determine what internal state we are keeping, then write this.
 
-      // calc our final velocity if we accelerate as much as we can in 1 cycle, up to a cap of v_max
-      // V_f = V_i + at
-      float v_f = v_i + (a_max * cycle_time);
-
-      // distance travelled while accelerating up to v_max
+  // 2. calculate which phase we're in
+  if(phase != PHASE_DECEL) phase = (v_i == v_max) ? PHASE_CRUISE : PHASE_ACCEL;
+  
+  // 3. predict future state
+  tocPhases new_phase = phase;
+  switch(phase) {
+    case PHASE_ACCEL:
+      v_f = v_i + (a_max * cycle_time);
       float d_accel;
-      // distance travelled at v_max
       float d_at_max_vel;
-
       if(v_f <= v_max) {
-        // d_accel = (v_f^2 - v_i^2) / (2a)
         d_accel = (pow(v_f, 2) - pow(v_i, 2)) / (2 * a_max);
-        // if v_f <= v_max, then d_at_max_vel = 0.
         d_at_max_vel = 0;
       } else {
-        // d_accel = (v_f^2 - v_i^2) / (2a)    [in this case, v_f == v_max]
-        d_accel = (pow(v_max, 2) - pow(v_i, 2)) / (2 * a_max);
-
-        // calc time to reach max velocity
-        // V_f = V_i + at    ->    t = (V_f - V_i) / a    [in this case, v_f == v_max]
-        float t_accel = (v_max - v_i) / a_max;
-
-        // we're at max velocity for the remainder of the cycle
-        float t_at_max_vel = cycle_time - t_accel;
-
-        // d_at_max_vel = v * t
-        d_at_max_vel = v_max * t_at_max_vel;
+        v_f = v_max;
+        d_accel = (pow(v_f, 2) - pow(v_i, 2)) / (2 * a_max);
+        float t_accel = (v_f - v_i) / a_max;
+        float t_at_max_vel = cycle_time - t_accel; // max vel for rest of cycle
+        d_at_max_vel = v_f * t_at_max_vel;
       }
+      d_this_cycle = d_accel + d_at_max_vel;
+      d_total_after_this_cycle = d_curr + d_this_cycle;
 
-      // cap our v_f at v_max if v_f > v_max
-      v_f = std::min(v_f, v_max);    
-
-      float d_after_this_cycle = d_curr + d_accel + d_at_max_vel;
-
-      // calc total distance travelled in the future if we start decelerating next cycle
-      // v_f^2 = v_i^2 + 2ad
-      // d = (v_f^2 - v_i^2) / (2a)
       float v_i2 = v_f;
       float v_f2 = 0;
-      float d_after_decel_to_zero = (v_f2 - pow(v_i2, 2)) / (2 * decel_max)
-                                    + d_after_this_cycle;
+      d_total_after_decel_to_zero = (v_f2 - pow(v_i2, 2)) / (2 * decel_max)
+                                    + d_total_after_this_cycle;
+      if(d_total_after_decel_to_zero > d_max) new_phase = PHASE_DECEL;
+    break;
 
-      if(d_after_decel_to_zero > d_max) { // handle decel phase at end
-        decel_started = true;
-      } else { // accel phase
-        drive_msg_.velocity = v_f;
-        d_curr = d_after_this_cycle;
-        return;
-      }
-    }
+    case PHASE_CRUISE:
+      v_f = v_max;
+      d_this_cycle = (v_max / cycles_per_second);
+      d_total_after_this_cycle = d_curr + d_this_cycle;
+      d_total_after_decel_to_zero = (v_f - pow(v_i, 2)) / (2 * decel_max) 
+                + d_total_after_this_cycle;
+      if(d_total_after_decel_to_zero > d_max) new_phase = PHASE_DECEL;
+    break;
+
+    // deceleration
+    case PHASE_DECEL:
+      v_f = v_i + (decel_max * cycle_time);
+      if(v_f < 0) v_f = 0;
+      d_this_cycle = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
+      d_total_after_this_cycle = d_this_cycle + d_curr;
+      d_total_after_decel_to_zero = (0 - pow(v_i, 2)) / (2 * decel_max)
+                                + d_total_after_this_cycle;
+    break;
+
+    default:
+      assert(0); // should never occur
+    break;
+  } 
+
+  // 4. check if our prediction changed to decel
+  if(phase != new_phase) {
+    v_f = v_i + (decel_max * cycle_time);
+    if(v_f < 0) v_f = 0;
+    d_this_cycle = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
+    d_total_after_this_cycle = d_this_cycle + d_curr;
+    d_total_after_decel_to_zero = (0 - pow(v_i, 2)) / (2 * decel_max)
+                              + d_total_after_this_cycle;
+    phase = new_phase;
   }
-  // decel phase
 
-  // how hard can we decel
-  // v_f = v_i + at
-  float v_i = drive_msg_.velocity;
-  float v_f = v_i + (decel_max * cycle_time);
-  if(v_f < 0) v_f = 0;
+  // 5. act on predictions, update internal state
+    // TODO: determine what internal state we are keeping, then write this.
+  switch(phase) {
+    case PHASE_ACCEL:
+      d_curr = d_total_after_this_cycle;
+      drive_msg_.velocity = 1;
+    break;
 
-  // how far do we go while decelerating
-  // d = (v_f^2 - v_i^2) / (2a)
-  float d = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
+    case PHASE_CRUISE:
+      d_curr = d_total_after_this_cycle;
+      drive_msg_.velocity = 1;
+    break;
 
-  drive_msg_.velocity = v_f;
-  d_curr = d_curr + d;
+    case PHASE_DECEL:
+      d_curr = d_total_after_this_cycle;
+      drive_msg_.velocity = 0;
+    break;
+
+    default:
+      assert(0); // should never occur
+    break;
+  }
 
   return;
 }
