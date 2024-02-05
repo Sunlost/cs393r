@@ -99,10 +99,10 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   // phase of 1dTOC we are currently in
   phase = PHASE_ACCEL;
 
-  // distance we have travelled so far.
+  // distance we have travelled so far
   d_curr = 0;
-  // distance we want to go. arbitrarily decide this to be 10m to test
-  d_max = 10;
+  // distance we want to go
+  d_max = 3.65;
 
   // max velocity: 1.0 m/s
   v_max = 1.0;
@@ -210,6 +210,7 @@ void Navigation::toc1dstraightline() {
   v_i = hypot(robot_vel_.x(), robot_vel_.y());
   float d_travelled = sqrt(pow((robot_loc_.x() - prev_loc.x()), 2) + pow((robot_loc_.y() - prev_loc.y()), 2));
   d_curr = d_curr + d_travelled;
+  printf("d_curr is now %f", d_curr);
 
   // 2. calculate which phase we're in
   if(phase != PHASE_DECEL) phase = (v_i == v_max) ? PHASE_CRUISE : PHASE_ACCEL;
@@ -278,7 +279,6 @@ void Navigation::toc1dstraightline() {
   }
 
   // 5. act on predictions, update internal state
-    // TODO: determine what internal state we are keeping, then write this.
   switch(phase) {
     case PHASE_ACCEL:
       drive_msg_.velocity = 1;
