@@ -210,7 +210,7 @@ void Navigation::toc1dstraightline() {
   v_i = hypot(robot_vel_.x(), robot_vel_.y());
   float d_travelled = sqrt(pow((robot_loc_.x() - prev_loc.x()), 2) + pow((robot_loc_.y() - prev_loc.y()), 2));
   d_curr = d_curr + d_travelled;
-  printf("d_curr is now %f", d_curr);
+  printf("d_curr is now %f\n", d_curr);
 
   // 2. calculate which phase we're in
   if(phase != PHASE_DECEL) phase = (v_i == v_max) ? PHASE_CRUISE : PHASE_ACCEL;
