@@ -210,6 +210,10 @@ void Navigation::toc1dstraightline() {
   v_i = hypot(robot_vel_.x(), robot_vel_.y());
   float d_travelled = sqrt(pow((robot_loc_.x() - prev_loc.x()), 2) + pow((robot_loc_.y() - prev_loc.y()), 2));
   d_curr = d_curr + d_travelled;
+  printf("\n");
+  printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
+  printf("robot_loc_(x,y): %f, %f\n", robot_loc_.x(), robot_loc_.y());
+  printf("d_travelled: %f\n", d_travelled);
   printf("d_curr is now %f\n", d_curr);
 
   // 2. calculate which phase we're in
