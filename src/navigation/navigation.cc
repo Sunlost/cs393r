@@ -34,6 +34,7 @@
 #include "navigation.h"
 #include "visualization/visualization.h"
 #include <algorithm>
+#include <eigen3/Eigen/src/Core/Matrix.h>
 #include <sys/types.h>
 
 using Eigen::Vector2f;
@@ -54,8 +55,6 @@ AckermannCurvatureDriveMsg drive_msg_;
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
 
-bool decel_started;
-
 float d_curr;
 float d_max;
 
@@ -65,6 +64,8 @@ float decel_max;
 
 int cycles_per_second;
 float cycle_time;
+
+Vector2f prev_loc;
 
 } //namespace
 
@@ -95,9 +96,6 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
       "map", "navigation_global");
   InitRosHeader("base_link", &drive_msg_.header);
 
-  // decel started flag
-  // decel_started = false;
-
   // phase of 1dTOC we are currently in
   phase = PHASE_ACCEL;
 
@@ -112,6 +110,8 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   a_max = 4.0;
   // max deceleration: 4.0 m/s^2
   decel_max = -4.0;
+
+  prev_loc = Vector2f(0, 0);
 
   cycles_per_second = 20;
   cycle_time = (float) 1 / cycles_per_second;
@@ -177,7 +177,6 @@ void Navigation::Run() {
   toc1dstraightline();
 
 
-
   // Add timestamps to all messages.
   local_viz_msg_.header.stamp = ros::Time::now();
   global_viz_msg_.header.stamp = ros::Time::now();
@@ -197,7 +196,7 @@ void Navigation::toc1dstraightline() {
     // d = vt
 
   // initial velocity
-  float v_i = drive_msg_.velocity; // TODO: get from instance variables, not our previous cycle velocity
+  float v_i = 0;
   // final velocity
   float v_f = 0;
   // distance we will travel in this cycle
@@ -208,13 +207,17 @@ void Navigation::toc1dstraightline() {
   float d_total_after_decel_to_zero = 0;
 
   // 1. reconcile past prediction with actual car movement/velocity
-    // TODO: determine what internal state we are keeping, then write this.
+  v_i = hypot(robot_vel_.x(), robot_vel_.y());
+  float d_travelled = sqrt(pow((robot_loc_.x() - prev_loc.x()), 2) + pow((robot_loc_.y() - prev_loc.y()), 2));
+  d_curr = d_curr + d_travelled;
 
   // 2. calculate which phase we're in
   if(phase != PHASE_DECEL) phase = (v_i == v_max) ? PHASE_CRUISE : PHASE_ACCEL;
   
   // 3. predict future state
   tocPhases new_phase = phase;
+  float v_i2 = 0;
+  float v_f2 = 0;
   switch(phase) {
     case PHASE_ACCEL:
       v_f = v_i + (a_max * cycle_time);
@@ -233,8 +236,8 @@ void Navigation::toc1dstraightline() {
       d_this_cycle = d_accel + d_at_max_vel;
       d_total_after_this_cycle = d_curr + d_this_cycle;
 
-      float v_i2 = v_f;
-      float v_f2 = 0;
+      v_i2 = v_f;
+      v_f2 = 0;
       d_total_after_decel_to_zero = (v_f2 - pow(v_i2, 2)) / (2 * decel_max)
                                     + d_total_after_this_cycle;
       if(d_total_after_decel_to_zero > d_max) new_phase = PHASE_DECEL;
@@ -249,7 +252,6 @@ void Navigation::toc1dstraightline() {
       if(d_total_after_decel_to_zero > d_max) new_phase = PHASE_DECEL;
     break;
 
-    // deceleration
     case PHASE_DECEL:
       v_f = v_i + (decel_max * cycle_time);
       if(v_f < 0) v_f = 0;
@@ -279,17 +281,14 @@ void Navigation::toc1dstraightline() {
     // TODO: determine what internal state we are keeping, then write this.
   switch(phase) {
     case PHASE_ACCEL:
-      d_curr = d_total_after_this_cycle;
       drive_msg_.velocity = 1;
     break;
 
     case PHASE_CRUISE:
-      d_curr = d_total_after_this_cycle;
       drive_msg_.velocity = 1;
     break;
 
     case PHASE_DECEL:
-      d_curr = d_total_after_this_cycle;
       drive_msg_.velocity = 0;
     break;
 
@@ -297,6 +296,9 @@ void Navigation::toc1dstraightline() {
       assert(0); // should never occur
     break;
   }
+
+  // 6. save past state
+  prev_loc = Vector2f(robot_loc_.x(), robot_loc_.y());
 
   return;
 }
