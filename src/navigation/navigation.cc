@@ -138,6 +138,7 @@ void Navigation::UpdateOdometry(const Vector2f& loc,
     odom_start_loc_ = loc;
     odom_initialized_ = true;
     odom_loc_ = loc;
+    prev_loc = loc;
     odom_angle_ = angle;
     return;
   }
@@ -209,11 +210,11 @@ void Navigation::toc1dstraightline() {
 
   // 1. reconcile past prediction with actual car movement/velocity
   v_i = hypot(robot_vel_.x(), robot_vel_.y());
-  float d_travelled = sqrt(pow((robot_loc_.x() - prev_loc.x()), 2) + pow((robot_loc_.y() - prev_loc.y()), 2));
+  float d_travelled = sqrt(pow((odom_loc_.x() - prev_loc.x()), 2) + pow((odom_loc_.y() - prev_loc.y()), 2));
   d_curr = d_curr + d_travelled;
   printf("\n");
   printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
-  printf("robot_loc_(x,y): %f, %f\n", robot_loc_.x(), robot_loc_.y());
+  printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
   printf("d_travelled: %f\n", d_travelled);
   printf("d_curr is now %f\n", d_curr);
 
@@ -303,7 +304,7 @@ void Navigation::toc1dstraightline() {
   }
 
   // 6. save past state
-  prev_loc = Vector2f(robot_loc_.x(), robot_loc_.y());
+  prev_loc = odom_loc_;
 
   return;
 }
