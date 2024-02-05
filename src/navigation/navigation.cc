@@ -130,6 +130,7 @@ void Navigation::UpdateOdometry(const Vector2f& loc,
                                 float angle,
                                 const Vector2f& vel,
                                 float ang_vel) {
+  printf("new odometry! (x,y,v_x,v_y): %f, %f, %f, %f\n", loc.x(), loc.y(), vel.x(), vel.y());
   robot_omega_ = ang_vel;
   robot_vel_ = vel;
   if (!odom_initialized_) {
