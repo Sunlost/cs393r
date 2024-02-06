@@ -131,8 +131,9 @@ void Navigation::Run() {
   
   // The latest observed point cloud is accessible via "point_cloud_"
   drive_msg_.velocity = 1;
+  drive_msg_.curvature = 1;
+
     // cout << "vector0" << point_cloud_.at(0)[0] << endl;
-  cout << "vector" << point_cloud_[1] << endl;
 
     // cout << "vector1" << point_cloud_[1] << endl;
 

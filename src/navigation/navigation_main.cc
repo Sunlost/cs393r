@@ -94,9 +94,20 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
   // msg.range_max // Maximum observable range
   // msg.range_min // Minimum observable range
   // msg.ranges[i] // The range of the i'th ray
-  for (size_t i = 1; i < msg.ranges.size(); i++) {
-    float theta_i = msg.angle_min + (msg.ranges[i] - msg.ranges[i - 1]) * i;
-    Eigen::Vector2f p_i(msg.ranges[i] * cos(theta_i), msg.ranges[i] * sin(theta_i));
+  
+  // cout << "angleinc" << msg.angle_increment << endl;
+  // cout << "anglemax" << msg.angle_max << endl;
+  // cout << "anglemin" << msg.angle_min << endl;
+  // cout << "rangemax" << msg.range_max << endl;
+  // cout << "rangemin" << msg.range_min << endl;
+  // cout << "range" << msg.ranges.size() << endl;
+  // cout << "range" << msg.ranges.at(0) << endl;
+  // cout << "range" << msg.ranges.at(1) << endl;
+    cout << "whynotchange" << msg.ranges.at(353) << endl;
+  point_cloud_.clear();
+  for (size_t i = 0; i < msg.ranges.size(); i++) {
+    float theta_i = msg.angle_max + msg.angle_increment * i;
+    Eigen::Vector2f p_i(msg.ranges.at(i) * cos(theta_i), msg.ranges.at(i) * sin(theta_i));
     point_cloud_.push_back(p_i);
   }
   navigation_->ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
