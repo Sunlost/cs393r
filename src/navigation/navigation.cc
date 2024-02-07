@@ -232,7 +232,7 @@ void Navigation::toc1dstraightline() {
   if(cycle_num > toc_queue_size + 0x1UL) toc_queue.Pop();
   for(unsigned i = 0; i < toc_queue.Size(); i++) {
     // predict new velocity
-    float v_delta = toc_queue.values_.at(i).first;
+    float v_delta = toc_queue.values_[i].first;
     float new_v_f = v_delta + v_i_pred;
     if(new_v_f < 0) new_v_f = 0;
     if(new_v_f > 1) new_v_f = 1;
