@@ -332,12 +332,14 @@ void Navigation::toc1dstraightline() {
 
     case PHASE_CRUISE:
       drive_msg_.velocity = 1;
+      toc_queue.Push(0.0, cycle_num);
+      printf("pushed %f to queue with value %ld. now size %d.\n", 0.0, cycle_num, toc_queue.Size());
     break;
 
     case PHASE_DECEL:
       drive_msg_.velocity = 0;
       toc_queue.Push(-0.2, cycle_num);
-      printf("pushed %f to queue with value %ld. now size %d.\n", 0.2, cycle_num, toc_queue.Size());
+      printf("pushed %f to queue with value %ld. now size %d.\n", -0.2, cycle_num, toc_queue.Size());
     break;
 
     default:
