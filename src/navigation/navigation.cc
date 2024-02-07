@@ -261,6 +261,7 @@ void Navigation::toc1dstraightline() {
   float v_f2 = 0;
   switch(phase) {
     case PHASE_ACCEL:
+      printf("ACCEL PHASE\n");
       v_f = v_i + (a_max * cycle_time);
       float d_accel;
       float d_at_max_vel;
@@ -285,6 +286,7 @@ void Navigation::toc1dstraightline() {
     break;
 
     case PHASE_CRUISE:
+      printf("CRUISE PHASE\n");
       v_f = v_max;
       d_this_cycle = (v_max / cycles_per_second);
       d_total_after_this_cycle = d_curr_pred + d_this_cycle;
@@ -294,6 +296,7 @@ void Navigation::toc1dstraightline() {
     break;
 
     case PHASE_DECEL:
+      printf("ORG DECEL PHASE\n");
       v_f = v_i + (decel_max * cycle_time);
       if(v_f < 0) v_f = 0;
       d_this_cycle = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
@@ -309,6 +312,7 @@ void Navigation::toc1dstraightline() {
 
   // 5. check if our prediction changed to decel
   if(phase != new_phase) {
+    printf("SWAPPED TO DECEL PHASE\n");
     v_f = v_i + (decel_max * cycle_time);
     if(v_f < 0) v_f = 0;
     d_this_cycle = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
