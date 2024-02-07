@@ -170,13 +170,16 @@ void Navigation::pick_arc() {
     float arc_score = 0.0; 
     float best_arc_score = 0.0;
     float clearance = 0.0;
-    float temp_fpl = 100;
+    float temp_pos_fpl = 100;
+
+    float temp_neg_fpl = -100;
     float dtgoal = 0.0;
     // float arc_len = 0.0;
     PathOption *po = new PathOption();
     po->free_path_length = 100;
     for(int i = -10; i <= 10; i++) {
       float radius = 10 / (i + 1e-6);
+
       // okay never mind we're going from right to left
 
       // supposing that curvature = i / 10 since max curvature is 1
@@ -213,9 +216,17 @@ void Navigation::pick_arc() {
         float mag = magnitude(point.x() - center_x, point.y() - center_y);
         // cout << "radius " << radius << endl;
         // cout << "wwww " << w << endl;
-        float r_1 = abs(radius) - w;
-        float r_2 = magnitude(abs(radius) + w, h);
-        float theta = atan2(point.x(), abs(radius) - point.y());
+        float r_1 = radius - w;
+        if(radius < 0) r_1 = w - radius;
+        float r_2 = magnitude(radius + w, h);
+        if(radius < 0) r_2 = magnitude(radius - w, h);
+        // cout << "radius " << radius << endl;
+        // cout << "pointy" << point.y() << endl;
+        float theta = atan2(point.x(), radius - point.y());
+        // if(radius > 0) cout << "pointyradius" << radius - point.y() << endl;
+        if(radius < 0) theta = atan2(point.x(), 0 - (abs(radius) - point.y()));
+
+        // if(radius < 0) theta = atan2(point.x(),  point.y() - radius);;
         // count++;
         // cout << "countjsklfjsklf" << count << endl;
         // if (theta > 0) {
@@ -240,18 +251,34 @@ void Navigation::pick_arc() {
           //     point_drawn = 2;
           // }
           po->obstruction = p;
-          temp_fpl = radius * (theta - atan2(h, abs(radius) - w));
-          if (temp_fpl < po->free_path_length) {
-            po->free_path_length = temp_fpl;
+          temp_pos_fpl = radius * (theta - atan2(h, radius - w));
+          // if (i == 1) cout << "positiverawejfklwjr" << theta - atan2(h, radius - w) << endl;
+          // if(i == -1) cout << "negativekjfksldfjsl" << theta - atan2(h, w - radius) << endl;
+          
+          if(radius < 0) temp_neg_fpl = abs(radius * (theta - atan2(h, w - radius)));
+          if (temp_pos_fpl < po->free_path_length) {
+            po->free_path_length = temp_pos_fpl;
             visualization::DrawPathOption(
               i,
-              temp_fpl,
+              abs(temp_pos_fpl),
               0,
               14,
               true,
               local_viz_msg_
               );
-            cout << "tempfpl" << temp_fpl << endl;
+            // cout << "tempfpl" << temp_fpl << endl;
+          }
+          if (radius < 0 && temp_neg_fpl > po->free_path_length) {
+            po->free_path_length = temp_neg_fpl;
+            visualization::DrawPathOption(
+              i,
+              temp_neg_fpl,
+              0,
+              14,
+              true,
+              local_viz_msg_
+              );
+            // cout << "tempfpl" << temp_fpl << endl;
           }
         }
       }
