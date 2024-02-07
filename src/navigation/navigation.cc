@@ -336,6 +336,7 @@ void Navigation::toc1dstraightline() {
   // 7. save past state
   prev_loc = odom_loc_;
   toc_queue.Push(v_f - v_i, cycle_num);
+  printf("pushed %f to queue with value %ld. now size %d.\n", v_f - v_i, cycle_num, toc_queue.Size());
 
   return;
 }
