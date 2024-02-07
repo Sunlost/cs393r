@@ -327,20 +327,20 @@ void Navigation::toc1dstraightline() {
   switch(phase) {
     case PHASE_ACCEL:
       drive_msg_.velocity = 1;
-      toc_queue.Push(0.2, cycle_num);
-      printf("pushed %f to queue with value %ld. now size %d.\n", 0.2, cycle_num, toc_queue.Size());
+      // toc_queue.Push(0.2, cycle_num);
+      // printf("pushed %f to queue with value %ld. now size %d.\n", 0.2, cycle_num, toc_queue.Size());
     break;
 
     case PHASE_CRUISE:
       drive_msg_.velocity = 1;
-      toc_queue.Push(0.0, cycle_num);
-      printf("pushed %f to queue with value %ld. now size %d.\n", 0.0, cycle_num, toc_queue.Size());
+      // toc_queue.Push(0.0, cycle_num);
+      // printf("pushed %f to queue with value %ld. now size %d.\n", 0.0, cycle_num, toc_queue.Size());
     break;
 
     case PHASE_DECEL:
       drive_msg_.velocity = 0;
-      toc_queue.Push(-0.2, cycle_num);
-      printf("pushed %f to queue with value %ld. now size %d.\n", -0.2, cycle_num, toc_queue.Size());
+      // toc_queue.Push(-0.2, cycle_num);
+      // printf("pushed %f to queue with value %ld. now size %d.\n", -0.2, cycle_num, toc_queue.Size());
     break;
 
     default:
@@ -350,8 +350,8 @@ void Navigation::toc1dstraightline() {
 
   // 7. save past state
   prev_loc = odom_loc_;
-  // toc_queue.Push(v_f - v_i, cycle_num);
-  // printf("pushed %f to queue with value %ld. now size %d.\n", v_f - v_i, cycle_num, toc_queue.Size());
+  toc_queue.Push(v_f - v_i, cycle_num);
+  printf("pushed %f to queue with value %ld. now size %d.\n", v_f - v_i, cycle_num, toc_queue.Size());
 
   return;
 }
