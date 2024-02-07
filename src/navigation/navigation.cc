@@ -290,7 +290,7 @@ void Navigation::toc1dstraightline() {
       v_f = v_max;
       d_this_cycle = (v_max / cycles_per_second);
       d_total_after_this_cycle = d_curr_pred + d_this_cycle;
-      d_total_after_decel_to_zero = (v_f - pow(v_i, 2)) / (2 * decel_max) 
+      d_total_after_decel_to_zero = (0 - pow(v_i, 2)) / (2 * decel_max) 
                 + d_total_after_this_cycle;
       if(d_total_after_decel_to_zero > d_max) new_phase = PHASE_DECEL;
     break;
