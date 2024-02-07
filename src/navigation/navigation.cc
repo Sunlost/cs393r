@@ -131,16 +131,8 @@ void Navigation::Run() {
   // Feel free to make helper functions to structure the control appropriately.
   
   // The latest observed point cloud is accessible via "point_cloud_"
-  drive_msg_.velocity = 1;
-  drive_msg_.curvature = 1;
-
-    // cout << "vector0" << point_cloud_.at(0)[0] << endl;
-
-    // cout << "vector1" << point_cloud_[1] << endl;
-
-  // for (Vector2f v : point_cloud_) {
-  //   cout << "vectorrr" << v << endl;
-  // }
+  // drive_msg_.velocity = 1;
+  // drive_msg_.curvature = 1;
 
 
   // Eventually, you will have to set the control values to issue drive commands:
@@ -167,6 +159,10 @@ void Navigation::Run() {
   drive_pub_.publish(drive_msg_);
 }
 
+float magnitude(float x, float y) {
+  return sqrt(pow(x, 2) + pow(y, 2));
+}
+
 void Navigation::pick_arc() {
   // for loop of arcs
   // for each arc, get score
@@ -176,12 +172,12 @@ void Navigation::pick_arc() {
     float clearance = 0.0;
     float temp_fpl = 100;
     float dtgoal = 0.0;
-    float arc_len = 0.0;
+    // float arc_len = 0.0;
     PathOption *po = new PathOption();
     po->free_path_length = 100;
     for(int i = -10; i <= 10; i++) {
       float radius = 10 / (i + 1e-6);
-      
+      // okay never mind we're going from right to left
 
       // supposing that curvature = i / 10 since max curvature is 1
       // need location after 1 timestep and goal location
@@ -192,34 +188,69 @@ void Navigation::pick_arc() {
       // then equation of the circle is (x - a) ^2 + (y - (b - r))^2 = r^2
       // then closest point is sqrt((c - a) ^2 + (d - (b - r)))^2)) - r
 
-
       // treat center of turning as (0, r). robot is located at (0,0).
       // given point x,y which is an obstacle... but we don't know if it's an obstacle until we calculate the arc
       // so I still need to calculate all the arcs. and find the conflict somehow
-      double robot_x = robot_loc_.x();
-      double robot_y = robot_loc_.y();
+      float robot_x = 0;
+      float robot_y = 0;
 
-      double center_x = robot_x + radius; // left = negative, so if turn radius is neg that's fine
-      double center_y = robot_y;
+      float center_x = robot_x; 
+      float center_y = robot_y + radius; // left = negative, so if turn radius is neg that's fine
 
+      // cout << "radius " << radius << endl;
+      // cout << "robot points " << robot_x << "    " << robot_y << endl;
+      // cout << "center points " << center_x << "    " << center_y << endl;
+        // int count = 0;
+      // int point_drawn = 0;
 
       for (Vector2f point : point_cloud_) {
         // cout << "obstacles" << endl;
         // cout << point.x() << endl;
         // cout << point.y() << endl;
-        double h = 0.535 + .1; // add .1 for safety margin?
-        double w = 0.281 / 2 + .1;
-        double mag = sqrt(pow(point.x() - center_x, 2) + pow(point.y() - center_y, 2));
-        double r_1 = radius - w;
-        double r_2 = sqrt(pow(radius + w, 2) + pow(h,2));
-        double theta = atan2(point.x(), radius - point.y());
+        float h = 0.535 + 0.1; // add .1 for safety margin?
 
+        float w = 0.281 / 2 + 0.1;
+        float mag = magnitude(point.x() - center_x, point.y() - center_y);
+        // cout << "radius " << radius << endl;
+        // cout << "wwww " << w << endl;
+        float r_1 = abs(radius) - w;
+        float r_2 = magnitude(abs(radius) + w, h);
+        float theta = atan2(point.x(), abs(radius) - point.y());
+        // count++;
+        // cout << "countjsklfjsklf" << count << endl;
+        // if (theta > 0) {
+        //   if (mag >= r_1 && mag <= r_2) {
+        //     cout << "mag " << mag << endl;
+        //     cout << "r_2 " << r_2 << endl;
+        //     cout << "r1 " << r_1 << endl;
+        //     cout << "theta " << theta << endl;
+        //     cout << endl;
+        //   }
+          
+        // }
+        
         if (mag >= r_1 && mag <= r_2 && theta > 0) {
           Eigen::Vector2f p(point.x(), point.y());
+          Eigen::Vector2f q(center_x, center_y);
+          // point_drawn++;
+        // visualization::DrawLine(p, q, 2, local_viz_msg_);
+
+          // if (point_drawn == 1) {
+          //     visualization::DrawLine(p, q, 2, local_viz_msg_);
+          //     point_drawn = 2;
+          // }
           po->obstruction = p;
-          temp_fpl = radius * (atan2(h, radius - w) - theta);
+          temp_fpl = radius * (theta - atan2(h, abs(radius) - w));
           if (temp_fpl < po->free_path_length) {
             po->free_path_length = temp_fpl;
+            visualization::DrawPathOption(
+              i,
+              temp_fpl,
+              0,
+              14,
+              true,
+              local_viz_msg_
+              );
             cout << "tempfpl" << temp_fpl << endl;
           }
         }
@@ -301,14 +332,7 @@ void Navigation::pick_arc() {
 
     }
 
-    visualization::DrawPathOption(
-      po->curvature,
-      arc_len,
-      po->clearance,
-      14,
-      true,
-      local_viz_msg_
-      );
+    
     // cout << best_c << endl;
 
 //     struct PathOption {
