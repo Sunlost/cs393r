@@ -34,6 +34,7 @@
 #include "navigation.h"
 #include "visualization/visualization.h"
 #include <algorithm>
+#include <cstdint>
 #include <eigen3/Eigen/src/Core/Matrix.h>
 #include <sys/types.h>
 #include "simple_queue.h"
@@ -68,7 +69,7 @@ float cycle_time;
 uint64_t cycle_num;
 
 Vector2f prev_loc;
-SimpleQueue<uint64_t, float> toc_queue;
+SimpleQueue<float, uint64_t> toc_queue;
 uint8_t toc_queue_size;
 
 } //namespace
@@ -229,7 +230,10 @@ void Navigation::toc1dstraightline() {
   float d_curr_pred = d_curr;
   float v_i_pred = v_i;
   printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
-  if(cycle_num > toc_queue_size + 0x1UL) toc_queue.Pop();
+  if(cycle_num > toc_queue_size + 0x1UL) {
+    //printf("POPPED! cycle %ld\n");
+    toc_queue.Pop();
+  }
   for(unsigned i = 0; i < toc_queue.Size(); i++) {
     // predict new velocity
     float v_delta = toc_queue.values_[i].first;
