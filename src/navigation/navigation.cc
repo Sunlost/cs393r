@@ -121,7 +121,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   cycle_num = 0;
 
   prev_loc = Vector2f(0, 0);
-  toc_queue_size = 3; // assume 0.15s latency @ 0.05s/cycle = 3 cycles
+  toc_queue_size = 2; // assume 0.15s latency @ 0.05s/cycle = 3 cycles
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -349,6 +349,7 @@ void Navigation::toc1dstraightline() {
   }
 
   // 7. save past state
+  // float v_delta = v_f - v_i;
   prev_loc = odom_loc_;
   toc_queue.Push(v_f - v_i, cycle_num);
   printf("pushed %f to queue with value %ld. now size %d.\n", v_f - v_i, cycle_num, toc_queue.Size());
