@@ -170,18 +170,22 @@ void Navigation::pick_arc() {
     float arc_score = 0.0; 
     float best_arc_score = 0.0;
     float clearance = 0.0;
-    float temp_pos_fpl = 100;
-
-    float temp_neg_fpl = -100;
+    float temp_fpl = 100;
     float dtgoal = 0.0;
     // float arc_len = 0.0;
     PathOption *po = new PathOption();
-    po->free_path_length = 100;
+    // int arr[] = (100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100);
+    Eigen::Vector2f value(100, 100);
+    vector<Vector2f> drawings(21);
+    fill(drawings.begin(), drawings.end(), value);
+    int loopcounter = 0;
+    
+
     for(int i = -10; i <= 10; i++) {
       float radius = 10 / (i + 1e-6);
-
       // okay never mind we're going from right to left
-
+      cout << endl;
+      po->free_path_length = 100;
       // supposing that curvature = i / 10 since max curvature is 1
       // need location after 1 timestep and goal location
       // not just location, but along the arc, what the closest point is to the robot
@@ -198,7 +202,7 @@ void Navigation::pick_arc() {
       float robot_y = 0;
 
       float center_x = robot_x; 
-      float center_y = robot_y + radius; // left = negative, so if turn radius is neg that's fine
+      float center_y = robot_y + radius; // right = negative, so if turn radius is neg that's fine
 
       // cout << "radius " << radius << endl;
       // cout << "robot points " << robot_x << "    " << robot_y << endl;
@@ -219,14 +223,10 @@ void Navigation::pick_arc() {
         float r_1 = radius - w;
         if(radius < 0) r_1 = w - radius;
         float r_2 = magnitude(radius + w, h);
-        if(radius < 0) r_2 = magnitude(radius - w, h);
-        // cout << "radius " << radius << endl;
-        // cout << "pointy" << point.y() << endl;
-        float theta = atan2(point.x(), radius - point.y());
-        // if(radius > 0) cout << "pointyradius" << radius - point.y() << endl;
-        if(radius < 0) theta = atan2(point.x(), 0 - (abs(radius) - point.y()));
+        if(radius < 0) r_2 = magnitude(abs(radius) + w, h);
 
-        // if(radius < 0) theta = atan2(point.x(),  point.y() - radius);;
+        float theta = atan2(point.x(), radius - point.y());
+        if(radius < 0) theta = atan2(point.x(), radius - point.y());
         // count++;
         // cout << "countjsklfjsklf" << count << endl;
         // if (theta > 0) {
@@ -240,9 +240,9 @@ void Navigation::pick_arc() {
           
         // }
         
-        if (mag >= r_1 && mag <= r_2 && theta > 0) {
+        if (mag >= r_1 && mag <= r_2 ) {
           Eigen::Vector2f p(point.x(), point.y());
-          Eigen::Vector2f q(center_x, center_y);
+          // Eigen::Vector2f q(center_x, center_y);
           // point_drawn++;
         // visualization::DrawLine(p, q, 2, local_viz_msg_);
 
@@ -251,37 +251,21 @@ void Navigation::pick_arc() {
           //     point_drawn = 2;
           // }
           po->obstruction = p;
-          temp_pos_fpl = radius * (theta - atan2(h, radius - w));
-          // if (i == 1) cout << "positiverawejfklwjr" << theta - atan2(h, radius - w) << endl;
-          // if(i == -1) cout << "negativekjfksldfjsl" << theta - atan2(h, w - radius) << endl;
-          
-          if(radius < 0) temp_neg_fpl = abs(radius * (theta - atan2(h, w - radius)));
-          if (temp_pos_fpl < po->free_path_length) {
-            po->free_path_length = temp_pos_fpl;
-            visualization::DrawPathOption(
-              i,
-              abs(temp_pos_fpl),
-              0,
-              14,
-              true,
-              local_viz_msg_
-              );
-            // cout << "tempfpl" << temp_fpl << endl;
-          }
-          if (radius < 0 && temp_neg_fpl > po->free_path_length) {
-            po->free_path_length = temp_neg_fpl;
-            visualization::DrawPathOption(
-              i,
-              temp_neg_fpl,
-              0,
-              14,
-              true,
-              local_viz_msg_
-              );
+          temp_fpl = radius * (theta - atan2(h, abs(radius) - w));
+          if(radius < 0) temp_fpl = radius * (theta - atan2(h, radius + w));
+
+          if (abs(temp_fpl) < po->free_path_length) {
+            // cout << temp_fpl << endl;
+            po->free_path_length = abs(temp_fpl);
+            if (drawings.at(loopcounter).y() > abs(temp_fpl)) {
+              Eigen::Vector2f stupid(i, abs(temp_fpl));
+              drawings.at(loopcounter) = stupid;
+            } 
             // cout << "tempfpl" << temp_fpl << endl;
           }
         }
       }
+      loopcounter++;
 
       // if we hit upon a point in a point cloud, stop checking points and calculate score
 
@@ -359,6 +343,20 @@ void Navigation::pick_arc() {
 
     }
 
+    for (Vector2f point : drawings) {
+      cout << "pointoption" << point.x() << endl;
+      cout << point.y() << endl;
+
+      visualization::DrawPathOption(
+                    point.x(),
+                    point.y(),
+                    0,
+                    14,
+                    true,
+                    local_viz_msg_
+                    );
+    }
+    
     
     // cout << best_c << endl;
 
