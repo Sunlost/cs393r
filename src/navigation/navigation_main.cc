@@ -75,6 +75,7 @@ DEFINE_string(map, "GDC1", "Name of vector map file");
 bool run_ = true;
 sensor_msgs::LaserScan last_laser_msg_;
 Navigation* navigation_ = nullptr;
+float laser_rotation;
 
 void LaserCallback(const sensor_msgs::LaserScan& msg) {
   if (FLAGS_v > 0) {
@@ -108,7 +109,8 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
   for (size_t i = 0; i < msg.ranges.size(); i++) {
     float theta_i = msg.angle_max - msg.angle_increment * i;
 
-    Eigen::Vector2f p_i(msg.ranges.at(i) * cos(theta_i) + kLaserLoc.x(), msg.ranges.at(i) * sin(theta_i) + kLaserLoc.y());
+    Eigen::Vector2f p_i(msg.ranges.at(i) * cos(theta_i + laser_rotation) + kLaserLoc.x(),
+                        msg.ranges.at(i) * sin(theta_i + laser_rotation) + kLaserLoc.y());
     point_cloud_.push_back(p_i);
   }
   navigation_->ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
@@ -119,6 +121,8 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   if (FLAGS_v > 0) {
     printf("Odometry t=%f\n", msg.header.stamp.toSec());
   }
+
+  laser_rotation  = 2.0 * atan2(msg.pose.pose.orientation.z, msg.pose.pose.orientation.w);
   navigation_->UpdateOdometry(
       Vector2f(msg.pose.pose.position.x, msg.pose.pose.position.y),
       2.0 * atan2(msg.pose.pose.orientation.z, msg.pose.pose.orientation.w),
