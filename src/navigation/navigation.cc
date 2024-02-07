@@ -242,7 +242,8 @@ void Navigation::toc1dstraightline() {
     if(new_v_f > 1) new_v_f = 1;
     // predict new distance
     float d_delta;
-    if(v_delta >= 0) d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * a_max);
+    if(v_delta > 0) d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * a_max);
+    else if(v_delta == 0) d_delta = new_v_f * cycle_time;
     else d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * decel_max);
     // update predictions
     d_curr_pred += d_delta;
