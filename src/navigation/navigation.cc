@@ -228,7 +228,7 @@ void Navigation::toc1dstraightline() {
   // 2. predict what velocity/distance will be when the command we issue this cycle actuates
   float d_curr_pred = d_curr;
   float v_i_pred = v_i;
-  if(cycle_num > toc_queue_size + 1) toc_queue.Pop();
+  if(cycle_num > toc_queue_size + 0x1UL) toc_queue.Pop();
   for(unsigned i = 0; i < toc_queue.Size(); i++) {
     // predict new velocity
     float v_delta = toc_queue.values_.at(i).first;
