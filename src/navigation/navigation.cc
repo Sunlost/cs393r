@@ -242,13 +242,13 @@ void Navigation::toc1dstraightline() {
     if(new_v_f > 1) new_v_f = 1;
     // predict new distance
     float d_delta;
-    if(v_delta >= 0) d_delta = (pow(v_i_pred + v_delta, 2) - pow(v_i_pred, 2)) / (2 * a_max);
-    else d_delta = (pow(v_i_pred + v_delta, 2) - pow(v_i_pred, 2)) / (2 * decel_max);
+    if(v_delta >= 0) d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * a_max);
+    else d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * decel_max);
     // update predictions
     d_curr_pred += d_delta;
     v_i_pred = new_v_f;
     printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
-    printf("pred v_delta = %f, v_i_pred now = %f\n", v_delta, v_i_pred);
+    printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
   }
   v_i = v_i_pred;
 
