@@ -19,8 +19,11 @@
 // SOFTWARE.
 
 #include <algorithm>
+#include <cstddef>
 #include <deque>
+#include <sys/types.h>
 #include <utility>
+#include <vector>
 
 #ifndef MUTABLE_QUEUE
 #define MUTABLE_QUEUE
@@ -89,7 +92,10 @@ class SimpleQueue {
     return false;
   }
 
-  private:
+  unsigned Size() {
+    return (unsigned) values_.size();
+  }
+
   deque<pair<Value, Priority> > values_;
 };
 
