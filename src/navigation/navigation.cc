@@ -343,18 +343,24 @@ void Navigation::pick_arc() {
 
     }
 
-    for (Vector2f point : drawings) {
-      cout << "pointoption" << point.x() << endl;
-      cout << point.y() << endl;
+    cout << "pointoption" << drawings[0].x() << endl;
+    
 
-      visualization::DrawPathOption(
+    for (Vector2f point : drawings) {
+      // cout << "pointoption" << point.x() << endl;
+      // cout << point.y() << endl;
+
+      if (point.x() != 100) {
+        visualization::DrawPathOption(
                     point.x(),
                     point.y(),
                     0,
-                    14,
+                    0,
                     true,
                     local_viz_msg_
                     );
+      }
+      
     }
     
     
