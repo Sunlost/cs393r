@@ -228,6 +228,7 @@ void Navigation::toc1dstraightline() {
   // 2. predict what velocity/distance will be when the command we issue this cycle actuates
   float d_curr_pred = d_curr;
   float v_i_pred = v_i;
+  printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
   if(cycle_num > toc_queue_size + 0x1UL) toc_queue.Pop();
   for(unsigned i = 0; i < toc_queue.Size(); i++) {
     // predict new velocity
