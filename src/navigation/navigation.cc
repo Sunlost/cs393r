@@ -34,6 +34,7 @@
 #include "navigation.h"
 #include "visualization/visualization.h"
 #include<cmath>
+#include <eigen3/Eigen/src/Core/Matrix.h>
 
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -171,179 +172,91 @@ void Navigation::pick_arc() {
     float best_arc_score = 0.0;
     float clearance = 0.0;
     float temp_fpl = 100;
-    float dtgoal = 0.0;
-    // float arc_len = 0.0;
-    PathOption *po = new PathOption();
-    // int arr[] = (100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100);
+    float robot_x = 0;
+    float robot_y = 0;
+
+    // We will define the goal as some distance ahead of the robot 
+    Eigen::Vector2f dtgoal(robot_x + 100.0, robot_y) ; // use this to truncate feasible paths?
     Eigen::Vector2f value(100, 100);
-    vector<Vector2f> drawings(21);
+    
+    vector<PathOption> drawings(21);
     fill(drawings.begin(), drawings.end(), value);
     int loopcounter = 0;
     
+    // -ve x is the right direction, +ve x is the left direction
+    // remains the same as the mathemetical convention
+    // what do we need magnitude for, what do we need direction for
+    // lengths, for comparisons          everything else
+
+    // If we reflect the arcs we want into the other side, we need to reflect
+    // the point cloud as well to make sure we are still using the rights points
+    // with our "correct"/"right" calculations
+
+    // fpl = f(c, p) if c > 0
+    // fpl = f(-c, Mirrored(p)) if c < 0, we flip our curve back into the +ve, but make sure to give it the new points to work with
+
 
     for(int i = -10; i <= 10; i++) {
+
       float radius = 10 / (i + 1e-6);
-      // okay never mind we're going from right to left
+
+
       cout << endl;
+
+      PathOption *po = new PathOption();
       po->free_path_length = 100;
-      // supposing that curvature = i / 10 since max curvature is 1
-      // need location after 1 timestep and goal location
-      // not just location, but along the arc, what the closest point is to the robot
-      // closest point on arc is the intersection of the line from the center of the circle to the goal
-      // calculate how far distance to goal would be
-      // using robot as frame of reference, center of turning (if left) is (a, b - r)
-      // then equation of the circle is (x - a) ^2 + (y - (b - r))^2 = r^2
-      // then closest point is sqrt((c - a) ^2 + (d - (b - r)))^2)) - r
-
-      // treat center of turning as (0, r). robot is located at (0,0).
-      // given point x,y which is an obstacle... but we don't know if it's an obstacle until we calculate the arc
-      // so I still need to calculate all the arcs. and find the conflict somehow
-      float robot_x = 0;
-      float robot_y = 0;
-
+      po->clearance = 100;
+      
       float center_x = robot_x; 
-      float center_y = robot_y + radius; // right = negative, so if turn radius is neg that's fine
-
-      // cout << "radius " << radius << endl;
-      // cout << "robot points " << robot_x << "    " << robot_y << endl;
-      // cout << "center points " << center_x << "    " << center_y << endl;
-        // int count = 0;
-      // int point_drawn = 0;
-
+      float center_y = robot_y + radius;
+      mir_radius = 0.0; // used only for the flipping of certain paths
+      bool mirrored = false;
       for (Vector2f point : point_cloud_) {
-        // cout << "obstacles" << endl;
-        // cout << point.x() << endl;
-        // cout << point.y() << endl;
-        float h = 0.535 + 0.1; // add .1 for safety margin?
+        // but make sure to flip it so the math is a bit more stable 
+        if (radius < 0.0 && point.x() < 0) {
+          mirrored = true;
+          radius = -1 * radius; 
+          point.x() = -1 * point.x();
+        } 
 
-        float w = 0.281 / 2 + 0.1;
+        // now the math should work as we know it should.
         float mag = magnitude(point.x() - center_x, point.y() - center_y);
-        // cout << "radius " << radius << endl;
-        // cout << "wwww " << w << endl;
         float r_1 = radius - w;
-        if(radius < 0) r_1 = w - radius;
-        float r_2 = magnitude(radius + w, h);
-        if(radius < 0) r_2 = magnitude(abs(radius) + w, h);
-
+        float r_2 = magnitude(radius + car_width, car_height);
         float theta = atan2(point.x(), radius - point.y());
-        if(radius < 0) theta = atan2(point.x(), radius - point.y());
-        // count++;
-        // cout << "countjsklfjsklf" << count << endl;
-        // if (theta > 0) {
-        //   if (mag >= r_1 && mag <= r_2) {
-        //     cout << "mag " << mag << endl;
-        //     cout << "r_2 " << r_2 << endl;
-        //     cout << "r1 " << r_1 << endl;
-        //     cout << "theta " << theta << endl;
-        //     cout << endl;
-        //   }
-          
-        // }
-        
+        float phi = 
+
+        // this point is an opstruction for this path
         if (mag >= r_1 && mag <= r_2 ) {
           Eigen::Vector2f p(point.x(), point.y());
-          // Eigen::Vector2f q(center_x, center_y);
-          // point_drawn++;
-        // visualization::DrawLine(p, q, 2, local_viz_msg_);
-
-          // if (point_drawn == 1) {
-          //     visualization::DrawLine(p, q, 2, local_viz_msg_);
-          //     point_drawn = 2;
-          // }
           po->obstruction = p;
-          temp_fpl = radius * (theta - atan2(h, abs(radius) - w));
-          if(radius < 0) temp_fpl = radius * (theta - atan2(h, radius + w));
+          temp_fpl = radius * (theta - atan2(h, radius - w));
 
-          if (abs(temp_fpl) < po->free_path_length) {
-            // cout << temp_fpl << endl;
-            po->free_path_length = abs(temp_fpl);
-            if (drawings.at(loopcounter).y() > abs(temp_fpl)) {
-              Eigen::Vector2f stupid(i, abs(temp_fpl));
-              drawings.at(loopcounter) = stupid;
-            } 
-            // cout << "tempfpl" << temp_fpl << endl;
+          if (temp_fpl < po->free_path_length) {
+            po->free_path_length = temp_fpl;
           }
+
+          
+          // we have to assess clearance for this obstructed path
+
+
         }
+
       }
       loopcounter++;
 
-      // if we hit upon a point in a point cloud, stop checking points and calculate score
-
-
-      // given robot and a turning center loc, I am able to calculate the arc
-      // how to determine intersection?
-      // calculate cspace for each point. that is a circle w radius car_len
-      // later will have to figure out how to avoid an obstacle...
-
-
-      // double c_y = robot_loc_.y() + radius
-      // double v_x = nav_goal_loc_.x() - c_x;
-      // double v_y = nav_goal_loc_.y() - c_y;
-
-      // cout << "cx" << c_x << endl;
-      // cout << "cy" << c_y << endl;
-      // cout << "vx" << v_x << endl;
-      // cout << "vy" << v_y << endl;
-
-     
-      
-
-      // given closest point, robot loc, and radius, figure out phi
-      // fpl = radius * (atan2(h, radius - w) - atan2(po->obstruction.x(), radius - po->obstruction.y()));
-
-      // cout << "fpl" << fpl << endl;
-
-
-      // double c_y = robot_loc_.y() + radius
-      // double v_x = nav_goal_loc_.x() - c_x;
-      // double v_y = nav_goal_loc_.y() - c_y;
-
-      // cout << "cx" << c_x << endl;
-      // cout << "cy" << c_y << endl;
-      // cout << "vx" << v_x << endl;
-      // cout << "vy" << v_y << endl;
-
-      // double magV = sqrt(v_x*v_x + v_y*v_y);
-      // cout << "magv" << magV << endl;
-
-      // double p_x = robot_loc_.x() + v_x / magV * radius;
-      // double p_y = robot_loc_.y() + v_y / magV * radius;
-
-      // cout << "px" << p_x << endl;
-      // cout << "py" << p_y << endl;
-
-      // arcsin is supposed to be between -1 and 1
-
-      // double arc_angle = 2 * asin(0.5 * (pow(c_x - p_x, 2) + pow(c_y - p_y, 2)) / radius);
-      // double arc_length = arc_angle * radius;
-      // if (arc_angle != arc_angle) {
-      //   cout << "iiiii" << i << endl;
-      //   cout << "pow(c_x - p_x, 2)" << pow(c_x - p_x, 2) << endl;
-      //   cout << "pow(c_y - p_y, 2))" << pow(c_y - p_y, 2) << endl;
-      //   cout << "radius" << radius << endl;
-      //   cout << "arc_length" << arc_length << endl;
-
-
-      // }
-      // cout << "archangel...?" << arc_angle << endl;
-      // cout << "arc_length...?" << arc_length << endl;
-
-      // if point in point cloud collides, exit early
-      
-      // calculate free path length (dist car travels before obstructed)
-
       // calculate clearance around obstacle
       
-      arc_score = clearance*1 + po->free_path_length + dtgoal*1;
+      arc_score = po->clearance*1 + po->free_path_length + dtgoal*1;
       if (arc_score > best_arc_score) {
-        po->curvature = i/10;
+        po->curvature = i / 10.0;
         best_arc_score = arc_score;
       }
           // cout << po->curvature << endl;
 
     }
 
-    cout << "pointoption" << drawings[0].x() << endl;
+    cout << "pointoption " << drawings[0].x() << endl;
     
 
     for (Vector2f point : drawings) {
@@ -353,7 +266,7 @@ void Navigation::pick_arc() {
       if (point.x() != 100) {
         visualization::DrawPathOption(
                     point.x(),
-                    point.y(),
+                    point.y() / 2,
                     0,
                     0,
                     true,
