@@ -203,7 +203,7 @@ void Navigation::pick_arc() {
 
       cout << endl;
 
-      PathOption *po = new PathOption();
+      PathOption& po = drawings.at(loopcounter); // an alias to the existing struct in the drawings vector
       po->free_path_length = 100;
       po->clearance = 100;
       
@@ -219,26 +219,30 @@ void Navigation::pick_arc() {
           point.x() = -1 * point.x();
         } 
 
+        // find the closest point to this arc
+        
+
         // now the math should work as we know it should.
         float mag = magnitude(point.x() - center_x, point.y() - center_y);
         float r_1 = radius - w;
         float r_2 = magnitude(radius + car_width, car_height);
         float theta = atan2(point.x(), radius - point.y());
-        float phi = 
+        float phi = (theta - atan2(h, radius - w));
 
         // this point is an opstruction for this path
         if (mag >= r_1 && mag <= r_2 ) {
-          Eigen::Vector2f p(point.x(), point.y());
-          po->obstruction = p;
-          temp_fpl = radius * (theta - atan2(h, radius - w));
+          po->obstruction.x() = point.x();
+          po.obstruction.y() = point.y();
+          temp_fpl = radius * phi;
 
           if (temp_fpl < po->free_path_length) {
             po->free_path_length = temp_fpl;
           }
 
-          
-          // we have to assess clearance for this obstructed path
 
+          // we have to assess clearance for this obstructed path
+          // first comes the closest points
+          if (point.x() > 0 && point.x() < fpl
 
         }
 
