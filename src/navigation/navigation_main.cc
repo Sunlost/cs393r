@@ -100,8 +100,8 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
   for (size_t i = 0; i < msg.ranges.size(); i++) {
     float theta_i = msg.angle_min + msg.angle_increment * i;
 
-    Eigen::Vector2f p_i(msg.ranges.at(i) * cos(theta_i + laser_rotation) + kLaserLoc.x(),
-                        msg.ranges.at(i) * sin(theta_i + laser_rotation) + kLaserLoc.y());
+    Eigen::Vector2f p_i(msg.ranges.at(i) * cos(theta_i) + kLaserLoc.x(),
+                        msg.ranges.at(i) * sin(theta_i) + kLaserLoc.y());
     point_cloud_.push_back(p_i);
   }
   navigation_->ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
