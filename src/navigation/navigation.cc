@@ -134,7 +134,7 @@ void Navigation::Run() {
   // The latest observed point cloud is accessible via "point_cloud_"
   drive_msg_.velocity = 1;
   drive_msg_.curvature = pick_arc().curvature;
-  //pick_arc();
+  // pick_arc();
 
   // Eventually, you will have to set the control values to issue drive commands:
   // drive_msg_.curvature = ...;
@@ -165,7 +165,7 @@ PathOption Navigation::pick_arc() {
   float best_arc_score = -1;
   // float clearance = 0.0;
   double temp_fpl = 100;
-  double h = 0.535 + .1; // add .1 for safety margin
+  double h = 0.4295 + .1; // add .1 for safety margin
   double w = 0.281 / 2 + .1;
   vector<PathOption> path_options;
   PathOption best_path_option;
@@ -222,7 +222,7 @@ PathOption Navigation::pick_arc() {
         );
         if(radius < 0) temp_fpl = min(
           abs(radius * (theta - atan2(h, abs(radius) + w))),
-          2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / (2 * radius))
+          2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / abs(2 * radius))
         );
 
         // only save the smallest free path length for each curvature
