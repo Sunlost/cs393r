@@ -132,16 +132,16 @@ void Navigation::Run() {
   // Feel free to make helper functions to structure the control appropriately.
   
   // The latest observed point cloud is accessible via "point_cloud_"
-  // drive_msg_.velocity = 1;
-  // drive_msg_.curvature = 1;
-
+  drive_msg_.velocity = 1;
+  drive_msg_.curvature = pick_arc().curvature;
+  //pick_arc();
 
   // Eventually, you will have to set the control values to issue drive commands:
-  drive_msg_.curvature = pick_arc().curvature;
-  drive_msg_.velocity = .25;
+  // drive_msg_.curvature = ...;
+  // drive_msg_.velocity = 1;
 
   // For a fixed arc, implement obstacle detection and integrate it with 1-D TOC to drive up to the observed obstacle.
-  
+
 
   // Add timestamps to all messages.
   local_viz_msg_.header.stamp = ros::Time::now();
@@ -170,21 +170,20 @@ PathOption Navigation::pick_arc() {
   vector<PathOption> path_options;
   PathOption best_path_option;
 
+  int index = 0;
+
   // uncomment for debugging - I need to figure out how to set a nav target
-  Eigen::Vector2f goal(5, 3);
-  // visualization::DrawCross(goal, .3, 0x239847, local_viz_msg_);
+  Eigen::Vector2f goal(10, 0);
+  visualization::DrawCross(goal, .3, 0x239847, local_viz_msg_);
 
   // curvature options from right to left
   // max curvature is 1
   for(double i = -1; i <= 1; i += 0.1) {
 
-    PathOption path = PathOption();
+    path_options.push_back(PathOption());
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
-    path.free_path_length = 100; // init to some high value
-    path.clearance = 1000; // init to some high value
-    path.curvature = i;
-    path_options.push_back(path);
-
+    path_options[index].free_path_length = 100; // init to some high value
+    path_options[index].clearance = 1000;
     Eigen::Vector2f center(0, radius); // right = negative value
     double goal_mag = magnitude(goal.x() - center.x(), goal.y() - center.y());
     Eigen::Vector2f closest_point(
@@ -215,7 +214,8 @@ PathOption Navigation::pick_arc() {
         theta = atan2(point.x(), point.y() - radius);
       }
 
-      if (mag >= r_1 && mag <= r_2 && theta > 0) {
+      // if the point lies within car's swept volume
+      if ((mag >= r_1 && mag <= r_2) && theta > 0) {
         temp_fpl = min(
           radius * (theta - atan2(h, radius - w)),
           2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / abs(2 * radius))
@@ -226,33 +226,51 @@ PathOption Navigation::pick_arc() {
         );
 
         // only save the smallest free path length for each curvature
-        if (temp_fpl < path.free_path_length) {
-          path.free_path_length = temp_fpl;
-          path.obstruction = point;
-          path.closest_point = closest_point;
-        }
+        if (temp_fpl < path_options[index].free_path_length) {
+          path_options[index].free_path_length = temp_fpl;
+          //path_options[index].curvature = i;
+          path_options[index].obstruction = point;
+          path_options[index].closest_point = closest_point;
 
+        }
+        // where the debug draw arc was
+
+      } else if ((mag < r_1 && mag > r_2) && theta > 0) { 
+      
+        /* we know the fpl, so we can see if this the closest point
+           need to do some radius checks with mag.
+           old magnitude will just be the po's         */
+
+        /* the current closest point with which to judge clearance is either
+           less than r1 or greater than r2 */
+        double temp_clear = (mag < r_1) ? fabs(mag) - fabs(r_1) : fabs(mag) - fabs(r_2);
+        
+        if (temp_clear < path_options[index].clearance) {
+          path_options[index].clearance = temp_clear;
+        }
+        
       }
     }
 
-    // uncomment for debugging
-    visualization::DrawPathOption(
-                  path.curvature,
-                  path.free_path_length,
-                  path.clearance,
-                  0,
-                  false,
-                  local_viz_msg_);
+    // uncomment for debugging, shouldn't be changing how the arcs are looking.
+    visualization::DrawPathOption(i,
+                                  path_options[index].free_path_length,
+                                  path_options[index].clearance,
+                                  0,
+                                  false,
+                                  local_viz_msg_);
+
     
     // calculate clearance around obstacle
     double dtgoal = magnitude(goal.x(), goal.y());
-    arc_score = path.clearance * 2 + path.free_path_length + dtgoal*1;
+    arc_score = (path_options[index].clearance * 4) + (path_options[index].free_path_length * 1)  + (dtgoal * 1);
     if (arc_score > best_arc_score) {
-      best_path_option = path;
+      best_path_option = path_options[index];
       best_arc_score = arc_score;
     }
-  }    
 
+  }    
+    index++;
     return best_path_option;
   }
 
