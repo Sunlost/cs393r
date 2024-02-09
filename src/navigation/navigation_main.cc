@@ -100,6 +100,8 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
   for (size_t i = 0; i < msg.ranges.size(); i++) {
     float theta_i = msg.angle_min + msg.angle_increment * i;
 
+    /* Trying to add laser's rotation from car's odom_angle or robot_angle
+    really messes with point cloud accuracy. Macy & Sun were right. */
     Eigen::Vector2f p_i(msg.ranges.at(i) * cos(theta_i) + kLaserLoc.x(),
                         msg.ranges.at(i) * sin(theta_i) + kLaserLoc.y());
     point_cloud_.push_back(p_i);
@@ -113,7 +115,6 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
     printf("Odometry t=%f\n", msg.header.stamp.toSec());
   }
 
-  laser_rotation  = 2.0 * atan2(msg.pose.pose.orientation.z, msg.pose.pose.orientation.w);
   navigation_->UpdateOdometry(
       Vector2f(msg.pose.pose.position.x, msg.pose.pose.position.y),
       2.0 * atan2(msg.pose.pose.orientation.z, msg.pose.pose.orientation.w),
@@ -142,6 +143,7 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg msg) {
   if (FLAGS_v > 0) {
     printf("Localization t=%f\n", GetWallTime());
   }
+  laser_rotation = msg.pose.theta;
   navigation_->UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
 }
 
