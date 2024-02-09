@@ -175,12 +175,18 @@ void Navigation::pick_arc() {
     float robot_x = 0;
     float robot_y = 0;
 
+    PathOption sample = new PathOption(1000.0,
+                                       INFINITY,
+                                       1000.0,
+                                       Eigen::Vector2f(INFINITY, INFINITY),
+                                       Eigen::Vector2f(INFINITY, INFINITY)
+                                      );
+
     // We will define the goal as some distance ahead of the robot 
-    Eigen::Vector2f dtgoal(robot_x + 100.0, robot_y) ; // use this to truncate feasible paths?
-    Eigen::Vector2f value(100, 100);
+    Eigen::Vector2f dtgoal(robot_x + 10000.0, robot_y) ; // use this to truncate feasible paths?
     
     vector<PathOption> drawings(21);
-    fill(drawings.begin(), drawings.end(), value);
+    
     int loopcounter = 0;
     
     // -ve x is the right direction, +ve x is the left direction
@@ -213,13 +219,12 @@ void Navigation::pick_arc() {
       bool mirrored = false;
       for (Vector2f point : point_cloud_) {
         // but make sure to flip it so the math is a bit more stable 
-        if (radius < 0.0 && point.x() < 0) {
+        if (radius < 0.0) {
           mirrored = true;
           radius = -1 * radius; 
+          // make sure to flip the point as well, so that we don't get any repeats
           point.x() = -1 * point.x();
         } 
-
-        // find the closest point to this arc
         
 
         // now the math should work as we know it should.
@@ -229,7 +234,7 @@ void Navigation::pick_arc() {
         float theta = atan2(point.x(), radius - point.y());
         float phi = (theta - atan2(h, radius - w));
 
-        // this point is an opstruction for this path
+        // this point is an obstruction for this path
         if (mag >= r_1 && mag <= r_2 ) {
           po->obstruction.x() = point.x();
           po.obstruction.y() = point.y();
@@ -239,11 +244,21 @@ void Navigation::pick_arc() {
             po->free_path_length = temp_fpl;
           }
 
+        }
+        else if ((mag < r_1 && mag > r_2) && fabs(theta) > 0) { 
+          // we know the fpl, so we can see if this the closest point
+          // need to do some radius checks with mag.
+          // old magnitude will just be the po's 
 
-          // we have to assess clearance for this obstructed path
-          // first comes the closest points
-          if (point.x() > 0 && point.x() < fpl
+          // the current closest point with which to judge clearance is either
+          // less than r1 or greater than r2
 
+          temp_clear = (mag < r_1) ? fabs(mag) - fabs(r_1) : 
+                                     fabs(mag) - fabs(r_2);
+          
+          if (temp_clear < po->clearance)
+            po->clearance = curr_clear;
+          
         }
 
       }
@@ -270,7 +285,7 @@ void Navigation::pick_arc() {
       if (point.x() != 100) {
         visualization::DrawPathOption(
                     point.x(),
-                    point.y() / 2,
+                    point.y(),
                     0,
                     0,
                     true,
