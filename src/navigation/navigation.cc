@@ -170,8 +170,6 @@ PathOption Navigation::pick_arc() {
   vector<PathOption> path_options;
   PathOption best_path_option;
 
-  int index = 0;
-
   // uncomment for debugging - I need to figure out how to set a nav target
   Eigen::Vector2f goal(10, 0);
   visualization::DrawCross(goal, .3, 0x239847, local_viz_msg_);
@@ -180,10 +178,12 @@ PathOption Navigation::pick_arc() {
   // max curvature is 1
   for(double i = -1; i <= 1; i += 0.1) {
 
-    path_options.push_back(PathOption());
+    PathOption path_i = PathOption();
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
-    path_options[index].free_path_length = 100; // init to some high value
-    path_options[index].clearance = 1000;
+    path_i.free_path_length = 100; // init to some high value
+    path_i.clearance = 1000;
+    
+
     Eigen::Vector2f center(0, radius); // right = negative value
     double goal_mag = magnitude(goal.x() - center.x(), goal.y() - center.y());
     Eigen::Vector2f closest_point(
@@ -226,11 +226,11 @@ PathOption Navigation::pick_arc() {
         );
 
         // only save the smallest free path length for each curvature
-        if (temp_fpl < path_options[index].free_path_length) {
-          path_options[index].free_path_length = temp_fpl;
-          //path_options[index].curvature = i;
-          path_options[index].obstruction = point;
-          path_options[index].closest_point = closest_point;
+        if (temp_fpl < path_i.free_path_length) {
+          path_i.free_path_length = temp_fpl;
+          // path_i.curvature = i;
+          path_i.obstruction = point;
+          path_i.closest_point = closest_point;
 
         }
         // where the debug draw arc was
@@ -245,17 +245,19 @@ PathOption Navigation::pick_arc() {
            less than r1 or greater than r2 */
         double temp_clear = (mag < r_1) ? fabs(mag) - fabs(r_1) : fabs(mag) - fabs(r_2);
         
-        if (temp_clear < path_options[index].clearance) {
-          path_options[index].clearance = temp_clear;
+        if (temp_clear < path_i.clearance) {
+          path_i.clearance = temp_clear;
         }
         
       }
     }
 
+    path_options.push_back(path_i);
+
     // uncomment for debugging, shouldn't be changing how the arcs are looking.
     visualization::DrawPathOption(i,
-                                  path_options[index].free_path_length,
-                                  path_options[index].clearance,
+                                  path_i.free_path_length,
+                                  path_i.clearance,
                                   0,
                                   false,
                                   local_viz_msg_);
@@ -263,14 +265,13 @@ PathOption Navigation::pick_arc() {
     
     // calculate clearance around obstacle
     double dtgoal = magnitude(goal.x(), goal.y());
-    arc_score = (path_options[index].clearance * 4) + (path_options[index].free_path_length * 1)  + (dtgoal * 1);
+    arc_score = (path_i.clearance * 4) + (path_i.free_path_length * 1)  + (dtgoal * 1);
     if (arc_score > best_arc_score) {
-      best_path_option = path_options[index];
+      best_path_option = path_i;
       best_arc_score = arc_score;
     }
 
   }    
-    index++;
     return best_path_option;
   }
 
