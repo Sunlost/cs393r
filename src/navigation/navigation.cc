@@ -158,17 +158,19 @@ float magnitude(double x, double y) {
 }
 
 void Navigation::pick_arc() {
-  // for loop of arcs
-  // for each arc, get score
-  // return the best arc
-    // float arc_score = 0.0; 
-    // float best_arc_score = 0.0;
-    // float clearance = 0.0;
     double temp_fpl = 100;
     PathOption *po = new PathOption();
     // remove
-    Eigen::Vector2f value(100, 100);
-    vector<Vector2f> drawings(21);
+    float h = 0.535 + 0.1; // add .1 for safety margin?
+    float w = 0.281 / 2 + 0.1;
+
+    PathOption value;
+    value.curvature = 100.0;
+    value.clearance = INFINITY;
+    value.free_path_length = 100.0;
+    value.closest_point = Eigen::Vector2f(INFINITY, INFINITY);
+    value.obstruction = Eigen::Vector2f(INFINITY, INFINITY);
+    vector<PathOption> drawings(21);
     fill(drawings.begin(), drawings.end(), value);
     int loopcounter = 0;
     
@@ -178,7 +180,7 @@ void Navigation::pick_arc() {
       // cout << "the radius" << radius << endl;
       // okay never mind we're going from right to left
       cout << endl;
-      po->free_path_length = 100;
+
       // supposing that curvature = i / 10 since max curvature is 1
       // need location after 1 timestep and goal location
       // not just location, but along the arc, what the closest point is to the robot
@@ -191,6 +193,10 @@ void Navigation::pick_arc() {
       // treat center of turning as (0, r). robot is located at (0,0).
       // given point x,y which is an obstacle... but we don't know if it's an obstacle until we calculate the arc
       // so I still need to calculate all the arcs. and find the conflict somehow
+
+      // an alias to the existing struct in the drawings vector
+      PathOption& po = drawings.at(loopcounter);
+
       double robot_x = 0;
       double robot_y = 0;
 
@@ -199,8 +205,6 @@ void Navigation::pick_arc() {
 
       for (Vector2f point : point_cloud_) {
         visualization::DrawPoint(point, 0xB92348, local_viz_msg_);
-        double h = 0.535 + .1; // add .1 for safety margin?
-        double w = 0.281 / 2 + .1; // do I divide car width by 2?
         double mag = magnitude(point.x() - center_x, point.y() - center_y);
         double r_1 = radius - w;
         if(radius < 0) r_1 = w - radius;
@@ -208,9 +212,12 @@ void Navigation::pick_arc() {
         if(radius < 0) r_2 = magnitude(abs(radius) + w, h);
 
         double theta = atan2(point.x(), radius - point.y());
+        
         // y is negative too
         if(radius < 0) theta = atan2(point.x(), point.y() - radius);
 
+        double phi = theta - atan2(h, radius - w);
+        if(radius < 0) phi = theta - atan2(h, abs(radius) + w);
         // visualization::DrawLine(p0, p1, 0x298329, local_viz_msg_);
         // r2 trips up right side
         // 
@@ -218,8 +225,7 @@ void Navigation::pick_arc() {
         if (mag >= r_1 && mag <= r_2 && theta > 0) {
           Eigen::Vector2f p(point.x(), point.y());
           
-          temp_fpl = radius * (theta - atan2(h, radius - w));
-          if(radius < 0) temp_fpl = radius * (theta - atan2(h, abs(radius) + w));
+          temp_fpl = radius * phi;
           cout << "radius: " << radius << "temp_fpl multiplier" <<  theta - atan2(h, radius - w) << endl;
 
           // larger radius is the ones closer to center that makes sense
@@ -240,29 +246,46 @@ void Navigation::pick_arc() {
           // if(radius < 0) temp_fpl = radius * (theta - atan2(h, -w - radius));
           // if(radius < 0) temp_fpl = abs(radius * (theta - atan2(h, radius + w)));
           // cout << "tempfpl less than minimum fpl" << (temp_fpl < po->free_path_length) << endl;
-           if (temp_fpl < po->free_path_length) {
+           if (temp_fpl < po.free_path_length) {
             cout << "ultimate choice" <<  theta - atan2(h, radius - w) << endl;
 
-            po->free_path_length = temp_fpl;
-            po->curvature = i;
-            po->obstruction = p;
-            // remove later
-            // if (drawings.at(loopcounter).y() > temp_fpl) {
-            //   cout << "tempfpl" << temp_fpl << endl;
-            //   Eigen::Vector2f stupid(i, temp_fpl);
-            //   drawings.at(loopcounter) = stupid;
-            // } 
-            visualization::DrawPathOption(
-                    i,
-                    temp_fpl,
-                    0,
-                    0,
-                    true,
-                    local_viz_msg_
-                    );
+            po.free_path_length = temp_fpl;
+            po.curvature = i;
+            po.obstruction = p;
+
+            // May not be the best idea to print out now, since there are still more points to go thru
           }
+          // If the point lies outside, then it may affect clearance
+        } else if ((mag < r_1 && mag > r_2) && theta > 0) { 
+        
+          // we know the fpl, so we can see if this the closest point
+          // need to do some radius checks with mag.
+          // old magnitude will just be the po's 
+
+          // the current closest point with which to judge clearance is either
+          // less than r1 or greater than r2
+
+          float temp_clear = (mag < r_1) ? fabs(mag) - fabs(r_1) : 
+                                           fabs(mag) - fabs(r_2);
+          
+          if (temp_clear < po.clearance) {
+            Eigen::Vector2f p(point.x(), point.y());
+            po.clearance = temp_clear;
+            po.closest_point = p;
+          }
+          
         }
       }
+
+      // Path has gone thru all points, safe to print final curve
+      visualization::DrawPathOption(
+        po.curvature,
+        po.free_path_lengthl,
+        po.clearance,
+        0,
+        true,
+        local_viz_msg_
+        );
       loopcounter++; // remove
 
       // calc closest_point on fpl to goal and truncate
@@ -273,7 +296,6 @@ void Navigation::pick_arc() {
 
       // need to find b in terms of robot frame of reference
       Eigen::Vector2f adj_goal(0, 5);
-      // cout << "adjgoal " << adj_goal << endl;
       visualization::DrawCross(adj_goal, .3, 0x239847, local_viz_msg_);
 
       // is it possible that the radius is playing w things?
@@ -283,19 +305,12 @@ void Navigation::pick_arc() {
       double p_y = center_y + (adj_goal.y() - center_y) / mag * abs(radius);
       Eigen::Vector2f P(p_x, p_y);
       // given two points and center and radius, calculate arc length
-      // arclength/r = theta
 
       // cout << "pppp " << P << endl;
       visualization::DrawCross(P, .3, 0xab4865, local_viz_msg_);
 
       visualization::DrawLine(adj_goal, P, 0, local_viz_msg_);
 
-      // double arc_angle = 2 * asin(0.5 * (pow(center_x - p_x, 2) + pow(center_y - p_y, 2)) / radius);
-      // double arc_length = arc_angle * radius;
-
-      // }
-      // cout << "archangel...?" << arc_angle << endl;
-      // cout << "arc_length...?" << arc_length << endl;
       
       // calculate clearance around obstacle
       // double dtgoal = magnitude(goal.x(), goal.y());
@@ -323,19 +338,7 @@ void Navigation::pick_arc() {
     //                 );
     //   }
       
-    // }
     
-    
-    // cout << best_c << endl;
-
-//     struct PathOption {
-//   float curvature;
-//   float clearance;
-//   float free_path_length;
-//   Eigen::Vector2f obstruction;
-//   Eigen::Vector2f closest_point;
-//   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-// };
 }
 
 
