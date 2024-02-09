@@ -183,6 +183,7 @@ PathOption Navigation::pick_arc() {
     path_options.push_back(PathOption());
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
     path_options[index].free_path_length = 100; // init to some high value
+    path_options[index].clearance = 1000;
     
     Eigen::Vector2f center(0, radius); // right = negative value
     double goal_mag = magnitude(goal.x() - center.x(), goal.y() - center.y());
@@ -214,7 +215,8 @@ PathOption Navigation::pick_arc() {
         theta = atan2(point.x(), point.y() - radius);
       }
 
-      if (mag >= r_1 && mag <= r_2 && theta > 0) {
+      // if the point lies within car's swept volume
+      if ((mag >= r_1 && mag <= r_2) && theta > 0) {
         temp_fpl = min(
           radius * (theta - atan2(h, radius - w)),
           2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / abs(2 * radius))
@@ -232,22 +234,37 @@ PathOption Navigation::pick_arc() {
           path_options[index].closest_point = closest_point;
 
         }
+        // where the debug draw arc was
 
-        // uncomment for debugging
-        // visualization::DrawPathOption(
-        //               i,
-        //               path_options[index].free_path_length,
-        //               0,
-        //               0,
-        //               true,
-        //               local_viz_msg_
-        //               );
+      } else if ((mag < r_1 && mag > r_2) && theta > 0) { 
+      
+        /* we know the fpl, so we can see if this the closest point
+           need to do some radius checks with mag.
+           old magnitude will just be the po's         */
+
+        /* the current closest point with which to judge clearance is either
+           less than r1 or greater than r2 */
+        double temp_clear = (mag < r_1) ? fabs(mag) - fabs(r_1) : fabs(mag) - fabs(r_2);
+        
+        if (temp_clear < path_options[index].clearance) {
+          path_options[index].clearance = temp_clear;
+        }
+        
       }
     }
+
+    // uncomment for debugging, shouldn't be changing how the arcs are looking.
+    visualization::DrawPathOption(i,
+                                  path_options[index].free_path_length,
+                                  path_options[index].clearance,
+                                  0,
+                                  false,
+                                  local_viz_msg_);
+
     
     // calculate clearance around obstacle
     double dtgoal = magnitude(goal.x(), goal.y());
-    arc_score = path_options[index].free_path_length + dtgoal*1;
+    arc_score = path_options[index].clearance * 1 + path_options[index].free_path_length * 1  + dtgoal * 1;
     if (arc_score > best_arc_score) {
       best_path_option = path_options[index];
       best_arc_score = arc_score;
