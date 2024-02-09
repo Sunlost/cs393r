@@ -72,7 +72,7 @@ class Navigation {
   // functions written by us
 
   // handles all 1dtoc motion. sets velocity.
-  void pick_arc();
+  PathOption pick_arc();
 
 
  private:
