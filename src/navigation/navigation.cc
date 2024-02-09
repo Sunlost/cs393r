@@ -40,6 +40,7 @@ using amrl_msgs::AckermannCurvatureDriveMsg;
 using amrl_msgs::VisualizationMsg;
 using std::string;
 using std::vector;
+using std::min;
 
 using namespace math_util;
 using namespace ros_helpers;
@@ -140,7 +141,6 @@ void Navigation::Run() {
   // drive_msg_.velocity = 1;
 
   // For a fixed arc, implement obstacle detection and integrate it with 1-D TOC to drive up to the observed obstacle.
-
   pick_arc();
 
   // Add timestamps to all messages.
@@ -157,186 +157,106 @@ float magnitude(double x, double y) {
   return sqrt(pow(x, 2) + pow(y, 2));
 }
 
-void Navigation::pick_arc() {
+PathOption Navigation::pick_arc() {
   // for loop of arcs
-  // for each arc, get score
+  // for each arc, calc score
   // return the best arc
-    // float arc_score = 0.0; 
-    // float best_arc_score = 0.0;
-    // float clearance = 0.0;
-    double temp_fpl = 100;
-    PathOption *po = new PathOption();
-    // remove
-    Eigen::Vector2f value(100, 100);
-    vector<Vector2f> drawings(21);
-    fill(drawings.begin(), drawings.end(), value);
-    int loopcounter = 0;
+  float arc_score = 0.0; 
+  float best_arc_score = -1;
+  // float clearance = 0.0;
+  double temp_fpl = 100;
+  double h = 0.535 + .1; // add .1 for safety margin
+  double w = 0.281 / 2 + .1;
+  vector<PathOption> path_options;
+  PathOption best_path_option;
+
+  int index = 0;
+
+  // uncomment for debugging - I need to figure out how to set a nav target
+  Eigen::Vector2f goal(5, 3);
+  // visualization::DrawCross(goal, .3, 0x239847, local_viz_msg_);
+
+  // curvature options from right to left
+  // max curvature is 1
+  for(double i = -1; i <= 1; i += 0.1) {
+
+    path_options.push_back(PathOption());
+    double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
+    path_options[index].free_path_length = 100; // init to some high value
     
-    for(double i = -1; i <= 1; i += 0.1) {
-      // float i = 0.5;
-      double radius = 1 / (i + 1e-6);
-      // cout << "the radius" << radius << endl;
-      // okay never mind we're going from right to left
-      cout << endl;
-      po->free_path_length = 100;
-      // supposing that curvature = i / 10 since max curvature is 1
-      // need location after 1 timestep and goal location
-      // not just location, but along the arc, what the closest point is to the robot
-      // closest point on arc is the intersection of the line from the center of the circle to the goal
-      // calculate how far distance to goal would be
-      // using robot as frame of reference, center of turning (if left) is (a, b - r)
-      // then equation of the circle is (x - a) ^2 + (y - (b - r))^2 = r^2
-      // then closest point is sqrt((c - a) ^2 + (d - (b - r)))^2)) - r
+    Eigen::Vector2f center(0, radius); // right = negative value
+    double goal_mag = magnitude(goal.x() - center.x(), goal.y() - center.y());
+    Eigen::Vector2f closest_point(
+          center.x() + (goal.x() - center.x()) / goal_mag * abs(radius),
+          center.y() + (goal.y() - center.y()) / goal_mag * abs(radius)
+        );
 
-      // treat center of turning as (0, r). robot is located at (0,0).
-      // given point x,y which is an obstacle... but we don't know if it's an obstacle until we calculate the arc
-      // so I still need to calculate all the arcs. and find the conflict somehow
-      double robot_x = 0;
-      double robot_y = 0;
+    // uncomment for debugging
+    // visualization::DrawCross(P, .3, 0xab4865, local_viz_msg_);
+    // visualization::DrawLine(goal, P, 0, local_viz_msg_);
 
-      double center_x = robot_x; 
-      double center_y = robot_y + radius; // right = negative, so if turn radius is neg that's fine
+    // check for potential collisions with all points in the point cloud
+    for (Vector2f point : point_cloud_) {
+      // visualize point cloud, uncomment for debugging
+      // visualization::DrawPoint(point, 0xB92348, local_viz_msg_);
 
-      for (Vector2f point : point_cloud_) {
-        visualization::DrawPoint(point, 0xB92348, local_viz_msg_);
-        double h = 0.535 + .1; // add .1 for safety margin?
-        double w = 0.281 / 2 + .1; // do I divide car width by 2?
-        double mag = magnitude(point.x() - center_x, point.y() - center_y);
-        double r_1 = radius - w;
-        if(radius < 0) r_1 = w - radius;
-        double r_2 = magnitude(radius + w, h);
-        if(radius < 0) r_2 = magnitude(abs(radius) + w, h);
-
-        double theta = atan2(point.x(), radius - point.y());
-        // y is negative too
-        if(radius < 0) theta = atan2(point.x(), point.y() - radius);
-
-        // visualization::DrawLine(p0, p1, 0x298329, local_viz_msg_);
-        // r2 trips up right side
-        // 
-        // if point will be between r1 and r2 and will impact the front of the car
-        if (mag >= r_1 && mag <= r_2 && theta > 0) {
-          Eigen::Vector2f p(point.x(), point.y());
-          
-          temp_fpl = radius * (theta - atan2(h, radius - w));
-          if(radius < 0) temp_fpl = radius * (theta - atan2(h, abs(radius) + w));
-          cout << "radius: " << radius << "temp_fpl multiplier" <<  theta - atan2(h, radius - w) << endl;
-
-          // larger radius is the ones closer to center that makes sense
-
-          // temp_fpl = 5; 
-          // tempfpl is absolute valued anyway as it is passed into draw.
-          // but I should definitely absolute value it before I give it to sun
-
-          // for most of them, I want the theta - omega value to be > 1. but for 
-          // high radii, I want the theta - omega value to cut it down
-
-          // if (radius < 0) {
-          //   cout << "negthetaaaaa" << theta << endl;
-          // } else {
-          //   cout << "thetaaa" << theta << endl;
-          // }
-          // cout << "why is omega small for neg?" << atan2(h, -w - radius) << endl;
-          // if(radius < 0) temp_fpl = radius * (theta - atan2(h, -w - radius));
-          // if(radius < 0) temp_fpl = abs(radius * (theta - atan2(h, radius + w)));
-          // cout << "tempfpl less than minimum fpl" << (temp_fpl < po->free_path_length) << endl;
-           if (temp_fpl < po->free_path_length) {
-            cout << "ultimate choice" <<  theta - atan2(h, radius - w) << endl;
-
-            po->free_path_length = temp_fpl;
-            po->curvature = i;
-            po->obstruction = p;
-            // remove later
-            // if (drawings.at(loopcounter).y() > temp_fpl) {
-            //   cout << "tempfpl" << temp_fpl << endl;
-            //   Eigen::Vector2f stupid(i, temp_fpl);
-            //   drawings.at(loopcounter) = stupid;
-            // } 
-            visualization::DrawPathOption(
-                    i,
-                    temp_fpl,
-                    0,
-                    0,
-                    true,
-                    local_viz_msg_
-                    );
-          }
-        }
+      double mag = magnitude(point.x() - center.x(), point.y() - center.y());
+      
+      // calc arcs for rear left and front right car corners
+      double r_1 = radius - w;
+      double r_2 = magnitude(radius + w, h);
+      // whether point is in front or behind vehicle
+      double theta = atan2(point.x(), radius - point.y());
+      // if radius is negative things get weird
+      if (radius < 0) {
+        r_1 = w - radius;
+        r_2 = magnitude(abs(radius) + w, h);
+        theta = atan2(point.x(), point.y() - radius);
       }
-      loopcounter++; // remove
 
-      // calc closest_point on fpl to goal and truncate
-      // hardcoding goal to 2.5, 2.5 for now
-      // b = goal, a = center, c = point on circle
+      if (mag >= r_1 && mag <= r_2 && theta > 0) {
+        temp_fpl = min(
+          radius * (theta - atan2(h, radius - w)),
+          2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / abs(2 * radius))
+        );
+        if(radius < 0) temp_fpl = min(
+          abs(radius * (theta - atan2(h, abs(radius) + w))),
+          2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / (2 * radius))
+        );
 
-      // have to adjust p_x maybe
+        // only save the smallest free path length for each curvature
+        if (temp_fpl < path_options[index].free_path_length) {
+          path_options[index].free_path_length = temp_fpl;
+          path_options[index].curvature = i;
+          path_options[index].obstruction = point;
+          path_options[index].closest_point = closest_point;
 
-      // need to find b in terms of robot frame of reference
-      Eigen::Vector2f adj_goal(0, 5);
-      // cout << "adjgoal " << adj_goal << endl;
-      visualization::DrawCross(adj_goal, .3, 0x239847, local_viz_msg_);
+        }
 
-      // is it possible that the radius is playing w things?
-      double mag = magnitude(adj_goal.x() - center_x, adj_goal.y() - center_y);
-      // cout << "mag " << mag << endl;
-      double p_x = center_x + (adj_goal.x() - center_x) / mag * abs(radius);
-      double p_y = center_y + (adj_goal.y() - center_y) / mag * abs(radius);
-      Eigen::Vector2f P(p_x, p_y);
-      // given two points and center and radius, calculate arc length
-      // arclength/r = theta
-
-      // cout << "pppp " << P << endl;
-      visualization::DrawCross(P, .3, 0xab4865, local_viz_msg_);
-
-      visualization::DrawLine(adj_goal, P, 0, local_viz_msg_);
-
-      // double arc_angle = 2 * asin(0.5 * (pow(center_x - p_x, 2) + pow(center_y - p_y, 2)) / radius);
-      // double arc_length = arc_angle * radius;
-
-      // }
-      // cout << "archangel...?" << arc_angle << endl;
-      // cout << "arc_length...?" << arc_length << endl;
-      
-      // calculate clearance around obstacle
-      // double dtgoal = magnitude(goal.x(), goal.y());
-      // arc_score = clearance*1 + po->free_path_length + dtgoal*1;
-      // if (arc_score > best_arc_score) {
-      //   po->curvature = i/10;
-      //   best_arc_score = arc_score;
-      // }
-          // cout << po->curvature << endl;
-
-    }    
-
-    // for (Vector2f point : drawings) {
-    //   // cout << "pointoption" << point.x() << endl;
-    //   // cout << point.y() << endl;
-
-    //   if (point.x() != 100) {
-    //     visualization::DrawPathOption(
-    //                 point.x(),
-    //                 point.y(),
-    //                 0,
-    //                 0,
-    //                 true,
-    //                 local_viz_msg_
-    //                 );
-    //   }
-      
-    // }
+        // uncomment for debugging
+        // visualization::DrawPathOption(
+        //               i,
+        //               path_options[index].free_path_length,
+        //               0,
+        //               0,
+        //               true,
+        //               local_viz_msg_
+        //               );
+      }
+    }
     
-    
-    // cout << best_c << endl;
+    // calculate clearance around obstacle
+    double dtgoal = magnitude(goal.x(), goal.y());
+    arc_score = path_options[index].free_path_length + dtgoal*1;
+    if (arc_score > best_arc_score) {
+      best_path_option = path_options[index];
+      best_arc_score = arc_score;
+    }
 
-//     struct PathOption {
-//   float curvature;
-//   float clearance;
-//   float free_path_length;
-//   Eigen::Vector2f obstruction;
-//   Eigen::Vector2f closest_point;
-//   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-// };
-}
+  }    
+    index++;
+    return best_path_option;
+  }
 
 
 }  // namespace navigation
