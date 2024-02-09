@@ -168,144 +168,132 @@ void Navigation::pick_arc() {
   // for loop of arcs
   // for each arc, get score
   // return the best arc
-    float arc_score = 0.0; 
-    float best_arc_score = 0.0;
-    float clearance = 0.0;
-    float temp_fpl = 100;
-    float robot_x = 0;
-    float robot_y = 0;
+  float arc_score = 0.0; 
+  float best_arc_score = 0.0;
+  float temp_fpl = 100;
+  float robot_x = 0;
+  float robot_y = 0;
+  // We will define the goal as some distance ahead of the robot 
+  Eigen::Vector2f dtgoal(robot_x + 10000.0, robot_y) ; // use this to truncate feasible paths?
 
-    PathOption sample = new PathOption(1000.0,
-                                       INFINITY,
-                                       1000.0,
-                                       Eigen::Vector2f(INFINITY, INFINITY),
-                                       Eigen::Vector2f(INFINITY, INFINITY)
-                                      );
+  float h = 0.535 + 0.1; // add .1 for safety margin?
+  float w = 0.281 / 2 + 0.1;
 
-    // We will define the goal as some distance ahead of the robot 
-    Eigen::Vector2f dtgoal(robot_x + 10000.0, robot_y) ; // use this to truncate feasible paths?
+  PathOption value;
+  value.curvature = 1000.0;
+  value.clearance = INFINITY;
+  value.free_path_length = 1000.0;
+  value.closest_point = Eigen::Vector2f(INFINITY, INFINITY);
+  value.obstruction = Eigen::Vector2f(INFINITY, INFINITY);
+  vector<PathOption> drawings(21);
+  fill(drawings.begin(), drawings.end(), value);
+  
+
+  int loopcounter = 0;
+  
+  // -ve x is the right direction, +ve x is the left direction
+  // remains the same as the mathemetical convention
+  // what do we need magnitude for, what do we need direction for
+  // lengths, for comparisons          everything else
+
+  // If we reflect the arcs we want into the other side, we need to reflect
+  // the point cloud as well to make sure we are still using the rights points
+  // with our "correct"/"right" calculations
+
+  // fpl = f(c, p) if c > 0
+  // fpl = f(-c, Mirrored(p)) if c < 0, we flip our curve back into the +ve, 
+  // but make sure to give it the new points to work with
+
+
+  for(int i = -10; i <= 10; i++) {
+
+    float radius = 10 / (i + 1e-6);
+
+
+    cout << endl;
+
+    // an alias to the existing struct in the drawings vector
+    PathOption& po = drawings.at(loopcounter); 
     
-    vector<PathOption> drawings(21);
+    float center_x = robot_x; 
+    float center_y = robot_y + radius;
+    bool mirrored = false;
+    float 
     
-    int loopcounter = 0;
-    
-    // -ve x is the right direction, +ve x is the left direction
-    // remains the same as the mathemetical convention
-    // what do we need magnitude for, what do we need direction for
-    // lengths, for comparisons          everything else
+    for (Vector2f point : point_cloud_) {
+      Eigen::Vector2f eval_point(point.x(), point.y());
+      // but make sure to flip it so the math is a bit more stable 
+      if (radius < 0.0) {
+        mirrored = true;
+        radius = -1 * radius; 
+        // make sure to flip the point as well, so that we don't get any repeats
+        eval_point.x() = -1 * point.x();
+      } 
 
-    // If we reflect the arcs we want into the other side, we need to reflect
-    // the point cloud as well to make sure we are still using the rights points
-    // with our "correct"/"right" calculations
+      // now the math should work as we know it should.
+      float mag = magnitude(eval_point.x() - center_x, eval_point.y() - center_y);
+      float r_1 = radius - w;
+      float r_2 = magnitude(radius + w, h);
+      float theta = atan2(eval_point.x(), radius - eval_point.y());
+      float phi = (theta - atan2(h, radius - w));
 
-    // fpl = f(c, p) if c > 0
-    // fpl = f(-c, Mirrored(p)) if c < 0, we flip our curve back into the +ve, but make sure to give it the new points to work with
+      // this point is an obstruction for this path
+      if (mag >= r_1 && mag <= r_2 ) {
+        // TODO:: make sure to use right point if mirrored
+        po.obstruction.x() = eval_point.x();
+        po.obstruction.y() = eval_point.y();
+        temp_fpl = radius * phi;
 
+        if (temp_fpl < po.free_path_length) {
+          po.free_path_length = temp_fpl;
+        }
 
-    for(int i = -10; i <= 10; i++) {
+        // TODO: compute the optimal distance to the goal using correct points
 
-      float radius = 10 / (i + 1e-6);
+      }
+      else if ((mag < r_1 && mag > r_2) && fabs(theta) > 0) { 
+        // we know the fpl, so we can see if this the closest point
+        // need to do some radius checks with mag.
+        // old magnitude will just be the po's 
 
+        // the current closest point with which to judge clearance is either
+        // less than r1 or greater than r2
 
-      cout << endl;
-
-      PathOption& po = drawings.at(loopcounter); // an alias to the existing struct in the drawings vector
-      po->free_path_length = 100;
-      po->clearance = 100;
-      
-      float center_x = robot_x; 
-      float center_y = robot_y + radius;
-      mir_radius = 0.0; // used only for the flipping of certain paths
-      bool mirrored = false;
-      for (Vector2f point : point_cloud_) {
-        // but make sure to flip it so the math is a bit more stable 
-        if (radius < 0.0) {
-          mirrored = true;
-          radius = -1 * radius; 
-          // make sure to flip the point as well, so that we don't get any repeats
-          point.x() = -1 * point.x();
-        } 
+        float temp_clear = (mag < r_1) ? fabs(mag) - fabs(r_1) : 
+                                    fabs(mag) - fabs(r_2);
         
-
-        // now the math should work as we know it should.
-        float mag = magnitude(point.x() - center_x, point.y() - center_y);
-        float r_1 = radius - w;
-        float r_2 = magnitude(radius + car_width, car_height);
-        float theta = atan2(point.x(), radius - point.y());
-        float phi = (theta - atan2(h, radius - w));
-
-        // this point is an obstruction for this path
-        if (mag >= r_1 && mag <= r_2 ) {
-          po->obstruction.x() = point.x();
-          po.obstruction.y() = point.y();
-          temp_fpl = radius * phi;
-
-          if (temp_fpl < po->free_path_length) {
-            po->free_path_length = temp_fpl;
-          }
-
-        }
-        else if ((mag < r_1 && mag > r_2) && fabs(theta) > 0) { 
-          // we know the fpl, so we can see if this the closest point
-          // need to do some radius checks with mag.
-          // old magnitude will just be the po's 
-
-          // the current closest point with which to judge clearance is either
-          // less than r1 or greater than r2
-
-          temp_clear = (mag < r_1) ? fabs(mag) - fabs(r_1) : 
-                                     fabs(mag) - fabs(r_2);
-          
-          if (temp_clear < po->clearance)
-            po->clearance = curr_clear;
-          
-        }
-
+        if (temp_clear < po.clearance)
+          po.clearance = temp_clear;
+        
       }
-      loopcounter++;
-
-      // calculate clearance around obstacle
-      
-      arc_score = po->clearance*1 + po->free_path_length + dtgoal*1;
-      if (arc_score > best_arc_score) {
-        po->curvature = i / 10.0;
-        best_arc_score = arc_score;
-      }
-          // cout << po->curvature << endl;
 
     }
-
-    cout << "pointoption " << drawings[0].x() << endl;
+    loopcounter++;
     
-
-    for (Vector2f point : drawings) {
-      // cout << "pointoption" << point.x() << endl;
-      // cout << point.y() << endl;
-
-      if (point.x() != 100) {
-        visualization::DrawPathOption(
-                    point.x(),
-                    point.y(),
-                    0,
-                    0,
-                    true,
-                    local_viz_msg_
-                    );
-      }
-      
+    arc_score = po.clearance * 1 + po.free_path_length + dtgoal.y() * 1;
+    if (arc_score > best_arc_score) {
+      // TODO:: make sure to use right curvature value, gotta flip it back.
+      po.curvature = i / 10.0;
+      best_arc_score = arc_score; 
     }
-    
-    
-    // cout << best_c << endl;
 
-//     struct PathOption {
-//   float curvature;
-//   float clearance;
-//   float free_path_length;
-//   Eigen::Vector2f obstruction;
-//   Eigen::Vector2f closest_point;
-//   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-// };
+  }
+
+  cout << "pointoption " << drawings[0].curvature << endl;
+  
+
+  for (PathOption path : drawings) {
+
+    if (path.curvature != 1000.0) {
+      visualization::DrawPathOption(
+                  path.curvature,
+                  path.free_path_length,
+                  path.clearance,
+                  0,
+                  true,
+                  local_viz_msg_);
+    }
+  }
 }
 
 
