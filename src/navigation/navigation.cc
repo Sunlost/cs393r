@@ -34,6 +34,11 @@
 #include "navigation.h"
 #include "visualization/visualization.h"
 #include<cmath>
+#include <algorithm>
+#include <cstdint>
+#include <eigen3/Eigen/src/Core/Matrix.h>
+#include <sys/types.h>
+#include "simple_queue.h"
 
 using Eigen::Vector2f;
 using amrl_msgs::AckermannCurvatureDriveMsg;
@@ -53,6 +58,22 @@ VisualizationMsg global_viz_msg_;
 AckermannCurvatureDriveMsg drive_msg_;
 // Epsilon value for handling limited numerical precision.
 const float kEpsilon = 1e-5;
+
+float d_curr;
+float d_max;
+
+float v_max;
+float a_max;
+float decel_max;
+
+uint8_t cycles_per_second;
+float cycle_time;
+uint64_t cycle_num;
+
+Vector2f prev_loc;
+SimpleQueue<float, uint64_t> toc_queue;
+uint8_t toc_queue_size;
+
 } //namespace
 
 namespace navigation {
@@ -81,6 +102,28 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   global_viz_msg_ = visualization::NewVisualizationMessage(
       "map", "navigation_global");
   InitRosHeader("base_link", &drive_msg_.header);
+
+  // phase of 1dTOC we are currently in
+  phase = PHASE_ACCEL;
+
+  // distance we have travelled so far
+  d_curr = 0;
+  // distance we want to go
+  d_max = 3.65;
+
+  // max velocity: 1.0 m/s
+  v_max = 1.0;
+  // max acceleration: 4.0 m/s^2
+  a_max = 4.0;
+  // max deceleration: 4.0 m/s^2
+  decel_max = -4.0;
+
+  cycles_per_second = 20;
+  cycle_time = (float) 1 / cycles_per_second;
+  cycle_num = 0;
+
+  prev_loc = Vector2f(0, 0);
+  toc_queue_size = 2; // assume 0.15s latency @ 0.05s/cycle = 3 cycles
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -98,6 +141,7 @@ void Navigation::UpdateOdometry(const Vector2f& loc,
                                 float angle,
                                 const Vector2f& vel,
                                 float ang_vel) {
+  printf("new odometry! (x,y,v_x,v_y): %f, %f, %f, %f\n", loc.x(), loc.y(), vel.x(), vel.y());
   robot_omega_ = ang_vel;
   robot_vel_ = vel;
   if (!odom_initialized_) {
@@ -105,6 +149,7 @@ void Navigation::UpdateOdometry(const Vector2f& loc,
     odom_start_loc_ = loc;
     odom_initialized_ = true;
     odom_loc_ = loc;
+    prev_loc = loc;
     odom_angle_ = angle;
     return;
   }
@@ -151,9 +196,15 @@ void Navigation::Run() {
 
   // Eventually, you will have to set the control values to issue drive commands:
   // drive_msg_.curvature = ...;
-  // drive_msg_.velocity = 1;
+  // drive_msg_.velocity = ...;
 
-  // For a fixed arc, implement obstacle detection and integrate it with 1-D TOC to drive up to the observed obstacle.
+  cycle_num++;
+
+  // invoke curve-generator
+
+  // pass curves into cost function
+  
+  toc1dstraightline();
 
 
   // Add timestamps to all messages.
@@ -248,11 +299,7 @@ PathOption Navigation::pick_arc() {
         }
         // where the debug draw arc was
 
-      } 
-      
-      
-      if ((mag < r_1 || mag > r_2) && theta > 0) { 
-      
+      } else if ((mag < r_1 || mag > r_2) && theta > 0) { 
         /* we know the fpl, so we can see if this the closest point
            need to do some radius checks with mag.
            old magnitude will just be the po's         */
@@ -295,6 +342,167 @@ PathOption Navigation::pick_arc() {
   }    
     return best_path_option;
   }
+
+// calculate what phase of ToC we are in, ^"update state
+void Navigation::toc1dstraightline() {
+  // formulas used:
+    // v_f = v_i + at
+    // d = (v_f^2 - v_i^2) / (2a)
+    // t = (V_f - V_i) / a
+    // d = vt
+
+  // initial velocity
+  float v_i = 0;
+  // final velocity
+  float v_f = 0;
+  // distance we will travel in this cycle
+  float d_this_cycle = 0;
+  // total distance after this cycle ends
+  float d_total_after_this_cycle = 0;
+  // total distance after we fully decel to zero
+  float d_total_after_decel_to_zero = 0;
+
+  // 1. get actual car movement/velocity
+  v_i = hypot(robot_vel_.x(), robot_vel_.y());
+  float d_travelled = sqrt(pow((odom_loc_.x() - prev_loc.x()), 2) + pow((odom_loc_.y() - prev_loc.y()), 2));
+  d_curr = d_curr + d_travelled;
+
+  printf("\n");
+  printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
+  printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
+  printf("d_travelled: %f, d_curr %f\n", d_travelled, d_curr);
+  printf("v_i is now %f\n", v_i);
+
+  // 2. predict what velocity/distance will be when the command we issue this cycle actuates
+  float d_curr_pred = d_curr;
+  float v_i_pred = v_i;
+  printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
+  if(cycle_num > toc_queue_size + 0x1UL) {
+    //printf("POPPED! cycle %ld\n");
+    toc_queue.Pop();
+  }
+  for(unsigned i = 0; i < toc_queue.Size(); i++) {
+    // predict new velocity
+    float v_delta = toc_queue.values_[i].first;
+    float new_v_f = v_delta + v_i_pred;
+    if(new_v_f < 0) new_v_f = 0;
+    if(new_v_f > 1) new_v_f = 1;
+    // predict new distance
+    float d_delta;
+    if(v_delta > 0) d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * a_max);
+    else if(v_delta == 0) d_delta = new_v_f * cycle_time;
+    else d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * decel_max);
+    // update predictions
+    d_curr_pred += d_delta;
+    v_i_pred = new_v_f;
+    printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
+    printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
+  }
+  v_i = v_i_pred;
+
+  // 3. calculate which phase we're in
+  if(phase != PHASE_DECEL) phase = (v_i == v_max) ? PHASE_CRUISE : PHASE_ACCEL;
+  
+  // 4. predict future state
+  tocPhases new_phase = phase;
+  float v_i2 = 0;
+  float v_f2 = 0;
+  switch(phase) {
+    case PHASE_ACCEL:
+      printf("ACCEL PHASE\n");
+      v_f = v_i + (a_max * cycle_time);
+      float d_accel;
+      float d_at_max_vel;
+      if(v_f <= v_max) {
+        d_accel = (pow(v_f, 2) - pow(v_i, 2)) / (2 * a_max);
+        d_at_max_vel = 0;
+      } else {
+        v_f = v_max;
+        d_accel = (pow(v_f, 2) - pow(v_i, 2)) / (2 * a_max);
+        float t_accel = (v_f - v_i) / a_max;
+        float t_at_max_vel = cycle_time - t_accel; // max vel for rest of cycle
+        d_at_max_vel = v_f * t_at_max_vel;
+      }
+      d_this_cycle = d_accel + d_at_max_vel;
+      d_total_after_this_cycle = d_curr_pred + d_this_cycle;
+
+      v_i2 = v_f;
+      v_f2 = 0;
+      d_total_after_decel_to_zero = (v_f2 - pow(v_i2, 2)) / (2 * decel_max)
+                                    + d_total_after_this_cycle;
+      if(d_total_after_decel_to_zero > d_max) new_phase = PHASE_DECEL;
+    break;
+
+    case PHASE_CRUISE:
+      printf("CRUISE PHASE\n");
+      v_f = v_max;
+      d_this_cycle = (v_max / cycles_per_second);
+      d_total_after_this_cycle = d_curr_pred + d_this_cycle;
+      d_total_after_decel_to_zero = (0 - pow(v_i, 2)) / (2 * decel_max) 
+                + d_total_after_this_cycle;
+      if(d_total_after_decel_to_zero > d_max) new_phase = PHASE_DECEL;
+    break;
+
+    case PHASE_DECEL:
+      printf("ORG DECEL PHASE\n");
+      v_f = v_i + (decel_max * cycle_time);
+      if(v_f < 0) v_f = 0;
+      d_this_cycle = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
+      d_total_after_this_cycle = d_this_cycle + d_curr_pred;
+      d_total_after_decel_to_zero = (0 - pow(v_i, 2)) / (2 * decel_max)
+                                + d_total_after_this_cycle;
+    break;
+
+    default:
+      assert(0); // should never occur
+    break;
+  } 
+
+  // 5. check if our prediction changed to decel
+  if(phase != new_phase) {
+    printf("SWAPPED TO DECEL PHASE\n");
+    v_f = v_i + (decel_max * cycle_time);
+    if(v_f < 0) v_f = 0;
+    d_this_cycle = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
+    d_total_after_this_cycle = d_this_cycle + d_curr_pred;
+    d_total_after_decel_to_zero = (0 - pow(v_i, 2)) / (2 * decel_max)
+                              + d_total_after_this_cycle;
+    phase = new_phase;
+  }
+
+  // 6. act on predictions, update internal state
+  switch(phase) {
+    case PHASE_ACCEL:
+      drive_msg_.velocity = 1;
+      // toc_queue.Push(0.2, cycle_num);
+      // printf("pushed %f to queue with value %ld. now size %d.\n", 0.2, cycle_num, toc_queue.Size());
+    break;
+
+    case PHASE_CRUISE:
+      drive_msg_.velocity = 1;
+      // toc_queue.Push(0.0, cycle_num);
+      // printf("pushed %f to queue with value %ld. now size %d.\n", 0.0, cycle_num, toc_queue.Size());
+    break;
+
+    case PHASE_DECEL:
+      drive_msg_.velocity = 0;
+      // toc_queue.Push(-0.2, cycle_num);
+      // printf("pushed %f to queue with value %ld. now size %d.\n", -0.2, cycle_num, toc_queue.Size());
+    break;
+
+    default:
+      assert(0); // should never occur
+    break;
+  }
+
+  // 7. save past state
+  // float v_delta = v_f - v_i;
+  prev_loc = odom_loc_;
+  toc_queue.Push(v_f - v_i, cycle_num);
+  printf("pushed %f to queue with value %ld. now size %d.\n", v_f - v_i, cycle_num, toc_queue.Size());
+
+  return;
+}
 
 
 }  // namespace navigation
