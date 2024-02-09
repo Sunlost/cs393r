@@ -132,8 +132,21 @@ void Navigation::Run() {
   // Feel free to make helper functions to structure the control appropriately.
   
   // The latest observed point cloud is accessible via "point_cloud_"
+
+
+  PathOption chosen_path = pick_arc();
+  visualization::DrawPathOption(chosen_path.curvature,
+                                chosen_path.free_path_length,
+                                chosen_path.clearance,
+                                0x3EB489,
+                                true,
+                                local_viz_msg_);
+
+  cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
+  cout << "chosen path's clearance " << chosen_path.clearance << endl;
+
   drive_msg_.velocity = 1;
-  drive_msg_.curvature = pick_arc().curvature;
+  drive_msg_.curvature = chosen_path.curvature;
   // pick_arc();
 
   // Eventually, you will have to set the control values to issue drive commands:
@@ -228,14 +241,17 @@ PathOption Navigation::pick_arc() {
         // only save the smallest free path length for each curvature
         if (temp_fpl < path_i.free_path_length) {
           path_i.free_path_length = temp_fpl;
-          // path_i.curvature = i;
+          path_i.curvature = i;
           path_i.obstruction = point;
           path_i.closest_point = closest_point;
 
         }
         // where the debug draw arc was
 
-      } else if ((mag < r_1 && mag > r_2) && theta > 0) { 
+      } 
+      
+      
+      if ((mag < r_1 || mag > r_2) && theta > 0) { 
       
         /* we know the fpl, so we can see if this the closest point
            need to do some radius checks with mag.
@@ -244,6 +260,8 @@ PathOption Navigation::pick_arc() {
         /* the current closest point with which to judge clearance is either
            less than r1 or greater than r2 */
         double temp_clear = (mag < r_1) ? fabs(mag) - fabs(r_1) : fabs(mag) - fabs(r_2);
+
+        // cout << "temp clearance "<< temp_clear << endl;
         
         if (temp_clear < path_i.clearance) {
           path_i.clearance = temp_clear;
@@ -253,19 +271,22 @@ PathOption Navigation::pick_arc() {
     }
 
     path_options.push_back(path_i);
+    // cout << "radius of " << radius << " and clearance "<< path_i.clearance << endl;
 
     // uncomment for debugging, shouldn't be changing how the arcs are looking.
-    visualization::DrawPathOption(i,
-                                  path_i.free_path_length,
-                                  path_i.clearance,
-                                  0,
-                                  false,
-                                  local_viz_msg_);
+    // visualization::DrawPathOption(i,
+    //                               path_i.free_path_length,
+    //                               path_i.clearance,
+    //                               0,
+    //                               false,
+    //                               local_viz_msg_);
 
     
     // calculate clearance around obstacle
     double dtgoal = magnitude(goal.x(), goal.y());
-    arc_score = (path_i.clearance * 4) + (path_i.free_path_length * 1)  + (dtgoal * 1);
+
+    //arc_score = (path_i.free_path_length * 10)  + (dtgoal * 1);
+    arc_score = (path_i.clearance * 100) + (path_i.free_path_length * 1)  + (dtgoal * 1);
     if (arc_score > best_arc_score) {
       best_path_option = path_i;
       best_arc_score = arc_score;
