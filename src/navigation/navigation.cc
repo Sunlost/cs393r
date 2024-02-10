@@ -200,12 +200,12 @@ void Navigation::Run() {
 
 
   PathOption chosen_path = pick_arc();
-  visualization::DrawPathOption(chosen_path.curvature,
-                                chosen_path.free_path_length,
-                                chosen_path.clearance,
-                                0x3EB489,
-                                true,
-                                local_viz_msg_);
+  // visualization::DrawPathOption(chosen_path.curvature,
+  //                               chosen_path.free_path_length,
+  //                               chosen_path.clearance,
+  //                               0x3EB489,
+  //                               true,
+  //                               local_viz_msg_);
 
   // cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
   // cout << "chosen path's clearance " << chosen_path.clearance << endl;
@@ -216,8 +216,15 @@ void Navigation::Run() {
   // cout << endl;
 
   // drive_msg_.velocity = 1;
-  d_max = chosen_path.free_path_length;
-  drive_msg_.curvature = chosen_path.curvature;
+  // predict current position, odometry
+  position_prediction();
+
+  if(!chosen_path) {
+    d_max = chosen_path.free_path_length;
+    d_curr = 0;
+    drive_msg_.curvature = chosen_path.curvature;
+  }
+
 
   // Eventually, you will have to set the control values to issue drive commands:
   // drive_msg_.curvature = ...;
@@ -225,8 +232,7 @@ void Navigation::Run() {
 
   cycle_num++;
 
-  // predict current position, odometry
-  position_prediction();
+
 
   
 
@@ -363,7 +369,7 @@ PathOption Navigation::pick_arc() {
   }    
 
   if (prev_score >= best_arc_score) {
-    return prev_chosen_path;
+    return nullptr;
   }
   return best_path_option;
 }
