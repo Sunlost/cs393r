@@ -223,6 +223,19 @@ PathOption Navigation::pick_arc() {
       // visualize point cloud, uncomment for debugging
       // visualization::DrawPoint(point, 0xB92348, local_viz_msg_);
       Eigen::Vector2f eval_point(point.x(), point.y());
+
+      // -ve x is the right direction, +ve x is the left direction
+      // remains the same as the mathemetical convention
+      // what do we need magnitude for, what do we need direction for
+      // lengths, for comparisons          everything else
+
+      // If we reflect the arcs we want into the other side, we need to reflect
+      // the point cloud as well to make sure we are still using the rights points
+      // with our "correct"/"right" calculations
+
+      // fpl = f(c, p) if c > 0
+      // fpl = f(-c, Mirrored(p)) if c < 0, we flip our curve back into the +ve, 
+      // but make sure to give it the new points to work with
       // but make sure to flip it so the math is a bit more stable 
       if (radius < 0.0) {
         mirrored = true;
