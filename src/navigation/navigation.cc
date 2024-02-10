@@ -289,7 +289,7 @@ PathOption Navigation::pick_arc() {
         );
         if(radius < 0) temp_fpl = min(
           abs(radius * (theta - atan2(h, abs(radius) + w))),
-          2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / abs(2 * radius))
+          abs(2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / (2 * radius)))
         );
 
         // only save the smallest free path length for each curvature
@@ -341,15 +341,15 @@ PathOption Navigation::pick_arc() {
   return best_path_option;
 }
 
-Eigen::Vector2f future_loc_arc(PathOption& chosen_path, float d_delta) {
+void future_loc_arc(PathOption& chosen_path, Eigen::Vector2f& loc, float d_delta) {
   // we can grab current location from odom_loc, figure out based off of 
-  theta_pred = chosen_path.free_path_length * chosen_path.curvature;
+  double theta_pred = chosen_path.free_path_length * chosen_path.curvature;
   Eigen::Rotation2Df rotate(theta_pred);
-  future_loc = rotate * odom_loc;
+  future_loc = rotate * loc;
 }
 
 // calculate what phase of ToC we are in, ^"update state
-void Navigation::toc1dstraightline(const PathOption& path) {
+void Navigation::toc1dstraightline(PathOption& path) {
   // formulas used:
     // v_f = v_i + at
     // d = (v_f^2 - v_i^2) / (2a)
@@ -405,7 +405,7 @@ void Navigation::toc1dstraightline(const PathOption& path) {
     printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
     printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
   }
-  future_loc_arc(path, d_curr_pred);
+  future_loc_arc(path, odom_loc_, d_curr_pred);
   v_i = v_i_pred;
 
   // 3. calculate which phase we're in

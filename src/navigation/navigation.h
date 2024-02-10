@@ -77,7 +77,7 @@ class Navigation {
   // stuff written by us
 
   // handles all 1dtoc motion. sets velocity.
-  void toc1dstraightline(const PathOption& chosen_path);
+  void toc1dstraightline(PathOption& chosen_path);
   enum tocPhases { PHASE_ACCEL = 1, PHASE_CRUISE = 2, PHASE_DECEL = 3 };
   tocPhases phase; 
 
