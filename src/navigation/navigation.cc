@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <eigen3/Eigen/src/Core/Matrix.h>
+#include <eigen3/Eigen/src/Geometry/Rotation2D.h>
 #include <sys/types.h>
 #include "simple_queue.h"
 
@@ -71,6 +72,7 @@ float cycle_time;
 uint64_t cycle_num;
 
 Vector2f prev_loc;
+Vector2f future_loc;
 SimpleQueue<float, uint64_t> toc_queue;
 uint8_t toc_queue_size;
 
@@ -192,6 +194,7 @@ void Navigation::Run() {
 
   // drive_msg_.velocity = 1;
   d_max = chosen_path.free_path_length;
+  drive_msg_.curvature = chosen_path.curvature;
 
   // Eventually, you will have to set the control values to issue drive commands:
   // drive_msg_.curvature = ...;
@@ -246,6 +249,7 @@ PathOption Navigation::pick_arc() {
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
     path_i.free_path_length = 100; // init to some high value
     path_i.clearance = 1000;
+    path_i.curvature = i;
 
     Eigen::Vector2f center(0, radius); // right = negative value
     double goal_mag = magnitude(goal.x() - center.x(), goal.y() - center.y());
@@ -291,10 +295,8 @@ PathOption Navigation::pick_arc() {
         // only save the smallest free path length for each curvature
         if (temp_fpl < path_i.free_path_length) {
           path_i.free_path_length = temp_fpl;
-          path_i.curvature = i;
           path_i.obstruction = point;
           path_i.closest_point = closest_point;
-
         }
         // where the debug draw arc was
 
@@ -335,17 +337,19 @@ PathOption Navigation::pick_arc() {
       best_path_option = path_i;
       best_arc_score = arc_score;
     }
-
   }    
-    return best_path_option;
-  }
+  return best_path_option;
+}
 
-// Eigen::Vector2f future_loc_arc() {
-
-// }
+Eigen::Vector2f future_loc_arc(PathOption& chosen_path, float d_delta) {
+  // we can grab current location from odom_loc, figure out based off of 
+  theta_pred = chosen_path.free_path_length * chosen_path.curvature;
+  Eigen::Rotation2Df rotate(theta_pred);
+  future_loc = rotate * odom_loc;
+}
 
 // calculate what phase of ToC we are in, ^"update state
-void Navigation::toc1dstraightline(const PathOption& chosen_path) {
+void Navigation::toc1dstraightline(const PathOption& path) {
   // formulas used:
     // v_f = v_i + at
     // d = (v_f^2 - v_i^2) / (2a)
@@ -396,9 +400,12 @@ void Navigation::toc1dstraightline(const PathOption& chosen_path) {
     // update predictions
     d_curr_pred += d_delta;
     v_i_pred = new_v_f;
+
+    // maybe we use d_delta to predict our future location?
     printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
     printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
   }
+  future_loc_arc(path, d_curr_pred);
   v_i = v_i_pred;
 
   // 3. calculate which phase we're in
