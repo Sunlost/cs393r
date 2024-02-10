@@ -235,7 +235,7 @@ PathOption Navigation::pick_arc() {
         );
         if(radius < 0) temp_fpl = min(
           abs(radius * (theta - atan2(h, abs(radius) + w))),
-          2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / abs(2 * radius))
+          abs(2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / 2 * radius))
         );
 
         // only save the smallest free path length for each curvature
