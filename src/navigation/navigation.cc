@@ -223,6 +223,7 @@ void Navigation::Run() {
     d_max = chosen_path.free_path_length;
     d_curr = 0;
     drive_msg_.curvature = chosen_path.curvature;
+    d_curr_pred = 0;
   }
 
 
@@ -231,10 +232,6 @@ void Navigation::Run() {
   // drive_msg_.velocity = ...;
 
   cycle_num++;
-
-
-
-  
 
   // handle 1d toc
   toc1dstraightline();
@@ -392,7 +389,7 @@ void Navigation::position_prediction() {
   if(debug_print) printf("\n");
   if(debug_print) printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
   if(debug_print) printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
-  if(debug_print) printf("d_travelled: %f, d_curr %f\n", d_travelled, d_curr);
+  if(debug_print) printf("d_travelled: %f, d_curr %f, d_max %f\n", d_travelled, d_curr, d_max);
   if(debug_print) printf("v_i is now %f\n", v_i);
 
   // 2. predict our future position, building off of actual movement/velocity
