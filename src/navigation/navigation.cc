@@ -144,6 +144,11 @@ void Navigation::Run() {
 
   cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
   cout << "chosen path's clearance " << chosen_path.clearance << endl;
+  cout << "chosen path's curvature "<< chosen_path.free_path_length << endl;
+  cout << "chosen path's closest " << chosen_path.clearance << endl;
+  cout << "chosen path's obstruction "<< chosen_path.free_path_length << endl;
+  cout << "chosen path's clearance " << chosen_path.clearance << endl;
+  cout << endl;
 
   drive_msg_.velocity = 1;
   drive_msg_.curvature = chosen_path.curvature;
@@ -205,8 +210,8 @@ PathOption Navigation::pick_arc() {
         );
 
     // uncomment for debugging
-    // visualization::DrawCross(P, .3, 0xab4865, local_viz_msg_);
-    // visualization::DrawLine(goal, P, 0, local_viz_msg_);
+    // visualization::DrawCross(closest_point, .3, 0xab4865, local_viz_msg_);
+    // visualization::DrawLine(closest_point, P, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
     for (Vector2f point : point_cloud_) {
@@ -239,6 +244,12 @@ PathOption Navigation::pick_arc() {
         );
 
         // only save the smallest free path length for each curvature
+        // original if placement a la Macy
+          if (temp_fpl < path_i.free_path_length) {
+            path_i.free_path_length = temp_fpl;
+            path_i.closest_point = closest_point;
+            path_i.obstruction = point;
+          }
         // where the debug draw arc was
 
       } else if ((mag < r_1 || mag > r_2) && theta > 0) { 
@@ -259,11 +270,7 @@ PathOption Navigation::pick_arc() {
         
       }
 
-      if (temp_fpl < path_i.free_path_length) {
-          path_i.free_path_length = temp_fpl;
-          path_i.closest_point = closest_point;
-          path_i.obstruction = point;
-        }
+      // alternative if placement a la Macy
     }
 
     path_options.push_back(path_i);
