@@ -148,7 +148,24 @@ void Navigation::Run() {
   // float *curr = robot_loc_.data();
   // cout << "robot goal" << &curr << endl;
   // cout << robot_angle_ << endl;
-  pick_arc();
+  PathOption chosen_path = pick_arc();
+  visualization::DrawPathOption(chosen_path.curvature,
+                                chosen_path.free_path_length,
+                                chosen_path.clearance,
+                                0x3EB489,
+                                true,
+                                local_viz_msg_);
+
+  cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
+  cout << "chosen path's clearance " << chosen_path.clearance << endl;
+  cout << "chosen path's curvature "<< chosen_path.free_path_length << endl;
+  cout << "chosen path's closest " << chosen_path.clearance << endl;
+  cout << "chosen path's obstruction "<< chosen_path.free_path_length << endl;
+  cout << "chosen path's clearance " << chosen_path.clearance << endl;
+  cout << endl;
+
+  //drive_msg_.velocity = 1;
+  drive_msg_.curvature = chosen_path.curvature;
 
   // Add timestamps to all messages.
   local_viz_msg_.header.stamp = ros::Time::now();
@@ -164,63 +181,47 @@ float magnitude(float x, float y) {
   return sqrt(pow(x, 2) + pow(y, 2));
 }
 
-void Navigation::pick_arc() {
-  // for loop of arcs
-  // for each arc, get score
-  // return the best arc
+/* for loop of arcs, for each arc, calc score, return the best arc */
+PathOption Navigation::pick_arc() {
+
   float arc_score = 0.0; 
-  float best_arc_score = 0.0;
-  float temp_fpl = 100;
-  float robot_x = 0;
-  float robot_y = 0;
-  // We will define the goal as some distance ahead of the robot 
-  Eigen::Vector2f dtgoal(robot_x + 10000.0, robot_y) ; // use this to truncate feasible paths?
+  float best_arc_score = -1;
+  double temp_fpl = 100;
+  double h = 0.4295 + .1; // add .1 for safety margin
+  double w = 0.281 / 2 + .1;
+  vector<PathOption> path_options;
+  PathOption best_path_option;
 
-  float h = 0.535 + 0.1; // add .1 for safety margin?
-  float w = 0.281 / 2 + 0.1;
+  // uncomment for debugging - I need to figure out how to set a nav target
+  Eigen::Vector2f goal(10, 0);
+  visualization::DrawCross(goal, .3, 0x239847, local_viz_msg_);
 
-  PathOption value;
-  value.curvature = 1000.0;
-  value.clearance = INFINITY;
-  value.free_path_length = 1000.0;
-  value.closest_point = Eigen::Vector2f(INFINITY, INFINITY);
-  value.obstruction = Eigen::Vector2f(INFINITY, INFINITY);
-  vector<PathOption> drawings(21);
-  fill(drawings.begin(), drawings.end(), value);
-  
+  // curvature options from right to left
+  // max curvature is 1
+  for(double i = -1; i <= 1; i += 0.1) {
 
-  int loopcounter = 0;
-  
-  // -ve x is the right direction, +ve x is the left direction
-  // remains the same as the mathemetical convention
-  // what do we need magnitude for, what do we need direction for
-  // lengths, for comparisons          everything else
-
-  // If we reflect the arcs we want into the other side, we need to reflect
-  // the point cloud as well to make sure we are still using the rights points
-  // with our "correct"/"right" calculations
-
-  // fpl = f(c, p) if c > 0
-  // fpl = f(-c, Mirrored(p)) if c < 0, we flip our curve back into the +ve, 
-  // but make sure to give it the new points to work with
-
-
-  for(int i = -10; i <= 10; i++) {
-
-    float radius = 10 / (i + 1e-6);
-
-
-    cout << endl;
-
-    // an alias to the existing struct in the drawings vector
-    PathOption& po = drawings.at(loopcounter); 
+    PathOption path_i = PathOption();
+    double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
+    path_i.free_path_length = 100; // init to some high value
+    path_i.clearance = 1000;
+    path_i.curvature = i; 
     
-    float center_x = robot_x; 
-    float center_y = robot_y + radius;
+    Eigen::Vector2f center(0, radius); // right = negative value
+    double goal_mag = magnitude(goal.x() - center.x(), goal.y() - center.y());
+    Eigen::Vector2f closest_point(
+          center.x() + (goal.x() - center.x()) / goal_mag * abs(radius),
+          center.y() + (goal.y() - center.y()) / goal_mag * abs(radius)
+        );
+    
     bool mirrored = false;
-    float 
-    
+    // uncomment for debugging
+    // visualization::DrawCross(closest_point, .3, 0xab4865, local_viz_msg_);
+    // visualization::DrawLine(closest_point, P, 0, local_viz_msg_);
+
+    // check for potential collisions with all points in the point cloud
     for (Vector2f point : point_cloud_) {
+      // visualize point cloud, uncomment for debugging
+      // visualization::DrawPoint(point, 0xB92348, local_viz_msg_);
       Eigen::Vector2f eval_point(point.x(), point.y());
       // but make sure to flip it so the math is a bit more stable 
       if (radius < 0.0) {
@@ -231,27 +232,30 @@ void Navigation::pick_arc() {
       } 
 
       // now the math should work as we know it should.
-      float mag = magnitude(eval_point.x() - center_x, eval_point.y() - center_y);
-      float r_1 = radius - w;
-      float r_2 = magnitude(radius + w, h);
-      float theta = atan2(eval_point.x(), radius - eval_point.y());
-      float phi = (theta - atan2(h, radius - w));
+      double mag = magnitude(eval_point.x() - center.x(), eval_point.y() - center.y());
+      double r_1 = radius - w;
+      double r_2 = magnitude(radius + w, h);
+      double theta = atan2(eval_point.x(), radius - eval_point.y());
+      double phi = (theta - atan2(h, radius - w));
 
       // this point is an obstruction for this path
       if (mag >= r_1 && mag <= r_2 ) {
         // TODO:: make sure to use right point if mirrored
-        po.obstruction.x() = eval_point.x();
-        po.obstruction.y() = eval_point.y();
-        temp_fpl = radius * phi;
+        path_i.obstruction.x() = (mirrored) ? -1 * eval_point.x() : eval_point.x();
+        path_i.obstruction.y() = eval_point.y();
+        temp_fpl = std::min(
+          radius * phi,
+          2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / abs(2 * radius))
+        );
 
-        if (temp_fpl < po.free_path_length) {
-          po.free_path_length = temp_fpl;
+        if (temp_fpl < path_i.free_path_length) {
+          path_i.free_path_length = temp_fpl;
+          path_i.closest_point = closest_point;
+          path_i.obstruction = point;
         }
 
-        // TODO: compute the optimal distance to the goal using correct points
-
       }
-      else if ((mag < r_1 && mag > r_2) && fabs(theta) > 0) { 
+      else if ((mag < r_1 || mag > r_2) && fabs(theta) > 0) { 
         // we know the fpl, so we can see if this the closest point
         // need to do some radius checks with mag.
         // old magnitude will just be the po's 
@@ -260,40 +264,34 @@ void Navigation::pick_arc() {
         // less than r1 or greater than r2
 
         float temp_clear = (mag < r_1) ? fabs(mag) - fabs(r_1) : 
-                                    fabs(mag) - fabs(r_2);
+                                         fabs(mag) - fabs(r_2);
         
-        if (temp_clear < po.clearance)
-          po.clearance = temp_clear;
+        if (temp_clear < path_i.clearance)
+          path_i.clearance = temp_clear;
         
       }
-
     }
-    loopcounter++;
+
+    path_options.push_back(path_i);
     
-    arc_score = po.clearance * 1 + po.free_path_length + dtgoal.y() * 1;
+    // uncomment for debugging, shouldn't be changing how the arcs are looking.
+    visualization::DrawPathOption(path_i.curvature,
+                                  path_i.free_path_length,
+                                  path_i.clearance,
+                                  0,
+                                  false,
+                                  local_viz_msg_);
+
+
+    double dtgoal = magnitude(goal.x(), goal.y());
+
+    arc_score = (path_i.clearance * 100) + (path_i.free_path_length * 1)  + (dtgoal * 1);
     if (arc_score > best_arc_score) {
-      // TODO:: make sure to use right curvature value, gotta flip it back.
-      po.curvature = i / 10.0;
-      best_arc_score = arc_score; 
-    }
-
-  }
-
-  cout << "pointoption " << drawings[0].curvature << endl;
-  
-
-  for (PathOption path : drawings) {
-
-    if (path.curvature != 1000.0) {
-      visualization::DrawPathOption(
-                  path.curvature,
-                  path.free_path_length,
-                  path.clearance,
-                  0,
-                  true,
-                  local_viz_msg_);
+      best_path_option = path_i;
+      best_arc_score = arc_score;
     }
   }
+  return best_path_option;
 }
 
 
