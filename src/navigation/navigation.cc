@@ -219,7 +219,7 @@ void Navigation::Run() {
   // predict current position, odometry
   position_prediction();
 
-  if(chosen_path.free_path_length != 0) {
+  if(chosen_path.free_path_length != INFINITY) {
     d_max = chosen_path.free_path_length;
     d_curr = 0;
     drive_msg_.curvature = chosen_path.curvature;
@@ -370,7 +370,7 @@ PathOption Navigation::pick_arc() {
 
   if (prev_score >= best_arc_score) {
     PathOption empty = PathOption();
-    empty.free_path_length = 0;
+    empty.free_path_length = INFINITY;
     return empty;
   }
   return best_path_option;
