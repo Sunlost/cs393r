@@ -363,15 +363,8 @@ PathOption Navigation::pick_arc() {
   return best_path_option;
 }
 
-void future_loc_arc(PathOption& chosen_path, Eigen::Vector2f& loc, float d_delta) {
-  // we can grab current location from odom_loc, figure out based off of 
-  double theta_pred = chosen_path.free_path_length * chosen_path.curvature;
-  Eigen::Rotation2Df rotate(theta_pred);
-  future_loc = rotate * loc;
-}
-
 // calculate what phase of ToC we are in, ^"update state
-void Navigation::toc1dstraightline(PathOption& path) {
+// void Navigation::toc1dstraightline() {
 void Navigation::position_prediction() {
   // TODO: add additional past command logging to reconcile with LIDAR delay
 
@@ -463,7 +456,7 @@ void Navigation::toc1dstraightline() {
   }
   for(unsigned i = 0; i < toc_queue.Size(); i++) {
     // predict new velocity
-    float v_delta = toc_queue.values_[i].first;
+    float v_delta = std::get<1>(toc_queue.values_[i]);
     float new_v_f = v_delta + v_i_pred;
     if(new_v_f < 0) new_v_f = 0;
     if(new_v_f > 1) new_v_f = 1;
@@ -480,7 +473,6 @@ void Navigation::toc1dstraightline() {
     printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
     printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
   }
-  future_loc_arc(path, odom_loc_, d_curr_pred);
   v_i = v_i_pred;
 
   // 1. calculate which phase we're in
