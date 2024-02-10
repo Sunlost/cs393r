@@ -89,6 +89,9 @@ bool debug_print;
 
 namespace navigation {
 
+PathOption prev_chosen_path;
+double prev_score;
+
 string GetMapFileFromName(const string& map) {
   string maps_dir_ = ros::package::getPath("amrl_maps");
   return maps_dir_ + "/" + map + "/" + map + ".vectormap.txt";
@@ -358,6 +361,10 @@ PathOption Navigation::pick_arc() {
       best_arc_score = arc_score;
     }
   }    
+
+  if (prev_score >= best_arc_score) {
+    return prev_chosen_path;
+  }
   return best_path_option;
 }
 
