@@ -195,7 +195,7 @@ PathOption Navigation::pick_arc() {
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
     path_i.free_path_length = 100; // init to some high value
     path_i.clearance = 1000;
-    
+    path_i.curvature = i;
 
     Eigen::Vector2f center(0, radius); // right = negative value
     double goal_mag = magnitude(goal.x() - center.x(), goal.y() - center.y());
@@ -239,19 +239,9 @@ PathOption Navigation::pick_arc() {
         );
 
         // only save the smallest free path length for each curvature
-        if (temp_fpl < path_i.free_path_length) {
-          path_i.free_path_length = temp_fpl;
-          path_i.curvature = i;
-          path_i.obstruction = point;
-          path_i.closest_point = closest_point;
-
-        }
         // where the debug draw arc was
 
-      } 
-      
-      
-      if ((mag < r_1 || mag > r_2) && theta > 0) { 
+      } else if ((mag < r_1 || mag > r_2) && theta > 0) { 
       
         /* we know the fpl, so we can see if this the closest point
            need to do some radius checks with mag.
@@ -268,6 +258,12 @@ PathOption Navigation::pick_arc() {
         }
         
       }
+
+      if (temp_fpl < path_i.free_path_length) {
+          path_i.free_path_length = temp_fpl;
+          path_i.closest_point = closest_point;
+          path_i.obstruction = point;
+        }
     }
 
     path_options.push_back(path_i);
