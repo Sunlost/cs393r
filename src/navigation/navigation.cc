@@ -126,7 +126,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   d_max = 3.65;
 
   // max velocity: 1.0 m/s
-  v_max = 0.4;
+  v_max = 1.0;
   // max acceleration: 4.0 m/s^2
   a_max = 4.0;
   // max deceleration: 4.0 m/s^2
@@ -329,7 +329,7 @@ PathOption Navigation::pick_arc() {
         // only save the smallest free path length for each curvature
         if (temp_fpl < path_i.free_path_length) {
           path_i.free_path_length = temp_fpl;
-          path_i.closest_point = closest_point;
+          //path_i.closest_point = closest_point;
           path_i.obstruction = point;
         }
         // where the debug draw arc was
