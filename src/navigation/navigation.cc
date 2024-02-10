@@ -126,7 +126,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   d_max = 3.65;
 
   // max velocity: 1.0 m/s
-  v_max = 1.0;
+  v_max = 0.4;
   // max acceleration: 4.0 m/s^2
   a_max = 4.0;
   // max deceleration: 4.0 m/s^2
@@ -215,7 +215,7 @@ void Navigation::Run() {
   // cout << "chosen path's clearance " << chosen_path.clearance << endl;
   // cout << endl;
 
-  drive_msg_.velocity = 1.0;
+  // drive_msg_.velocity = 1.0;
   // predict current position, odometry
   position_prediction();
 
@@ -268,7 +268,7 @@ PathOption Navigation::pick_arc() {
 
   // uncomment for debugging - I need to figure out how to set a nav target
     // uncomment for debugging - I need to figure out how to set a nav target
-  Eigen::Vector2f goal(20, 0);
+  Eigen::Vector2f goal(10, 0);
 
   // Eigen::Rotation2Df goal_straight(-odom_angle);
 
