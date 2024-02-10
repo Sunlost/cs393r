@@ -223,6 +223,7 @@ void Navigation::Run() {
     d_max = chosen_path.free_path_length;
     d_curr = 0;
     drive_msg_.curvature = chosen_path.curvature;
+    printf("curvature set to %f\n", drive_msg_.curvature);
     d_curr_pred = 0;
     phase = PHASE_ACCEL;
   }
