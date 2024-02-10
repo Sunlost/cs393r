@@ -270,9 +270,9 @@ PathOption Navigation::pick_arc() {
     // uncomment for debugging - I need to figure out how to set a nav target
   Eigen::Vector2f goal(20, 0);
 
-  Eigen::Rotation2Df goal_straight(-odom_angle);
+  // Eigen::Rotation2Df goal_straight(-odom_angle);
 
-  goal = goal_straight * goal;
+  // goal = goal_straight * goal;
   visualization::DrawCross(goal, .3, 0x239847, local_viz_msg_);
 
   // curvature options from right to left
