@@ -180,19 +180,18 @@ void Navigation::Run() {
 
 
   PathOption chosen_path = pick_arc();
-  visualization::DrawPathOption(chosen_path.curvature,
-                                chosen_path.free_path_length,
-                                chosen_path.clearance,
-                                0x3EB489,
-                                true,
-                                local_viz_msg_);
+  // visualization::DrawPathOption(chosen_path.curvature,
+  //                               chosen_path.free_path_length,
+  //                               chosen_path.clearance,
+  //                               0x3EB489,
+  //                               true,
+  //                               local_viz_msg_);
 
-  cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
-  cout << "chosen path's clearance " << chosen_path.clearance << endl;
+  // cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
+  // cout << "chosen path's clearance " << chosen_path.clearance << endl;
 
   drive_msg_.velocity = 1;
   drive_msg_.curvature = chosen_path.curvature;
-  // pick_arc();
 
   // Eventually, you will have to set the control values to issue drive commands:
   // drive_msg_.curvature = ...;
@@ -204,7 +203,7 @@ void Navigation::Run() {
 
   // pass curves into cost function
   
-  toc1dstraightline();
+  toc1dstraightline(chosen_path);
 
 
   // Add timestamps to all messages.
@@ -246,7 +245,6 @@ PathOption Navigation::pick_arc() {
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
     path_i.free_path_length = 100; // init to some high value
     path_i.clearance = 1000;
-    
 
     Eigen::Vector2f center(0, radius); // right = negative value
     double goal_mag = magnitude(goal.x() - center.x(), goal.y() - center.y());
@@ -344,7 +342,7 @@ PathOption Navigation::pick_arc() {
   }
 
 // calculate what phase of ToC we are in, ^"update state
-void Navigation::toc1dstraightline() {
+void Navigation::toc1dstraightline(const PathOption& chosen_path) {
   // formulas used:
     // v_f = v_i + at
     // d = (v_f^2 - v_i^2) / (2a)
