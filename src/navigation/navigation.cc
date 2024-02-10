@@ -267,7 +267,7 @@ PathOption Navigation::pick_arc() {
         // cout << "temp clearance "<< temp_clear << endl;
         
         if (temp_clear < path_i.clearance) {
-          //assert(mag <= magnitude(path_i.closest_point.x() - center.x(), path_i.closest_point.y() - center.y()));
+          assert(mag <= magnitude(path_i.closest_point.x() - center.x(), path_i.closest_point.y() - center.y()));
           path_i.clearance = temp_clear;
         }
         
