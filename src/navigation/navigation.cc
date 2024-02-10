@@ -573,6 +573,7 @@ void Navigation::toc1dstraightline() {
       assert(0); // should never occur
     break;
   }
+  printf("drive_msg_.velocity = %f\n", drive_msg_.velocity);
 
   // 5. save past state
   prev_loc = odom_loc_;
