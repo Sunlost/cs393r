@@ -191,6 +191,11 @@ void Navigation::Run() {
 
   // cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
   // cout << "chosen path's clearance " << chosen_path.clearance << endl;
+  // cout << "chosen path's curvature "<< chosen_path.free_path_length << endl;
+  // cout << "chosen path's closest " << chosen_path.clearance << endl;
+  // cout << "chosen path's obstruction "<< chosen_path.free_path_length << endl;
+  // cout << "chosen path's clearance " << chosen_path.clearance << endl;
+  // cout << endl;
 
   // drive_msg_.velocity = 1;
   d_max = chosen_path.free_path_length;
@@ -295,8 +300,8 @@ PathOption Navigation::pick_arc() {
         // only save the smallest free path length for each curvature
         if (temp_fpl < path_i.free_path_length) {
           path_i.free_path_length = temp_fpl;
-          path_i.obstruction = point;
           path_i.closest_point = closest_point;
+          path_i.obstruction = point;
         }
         // where the debug draw arc was
 
@@ -314,7 +319,6 @@ PathOption Navigation::pick_arc() {
         if (temp_clear < path_i.clearance) {
           path_i.clearance = temp_clear;
         }
-        
       }
     }
 
@@ -322,12 +326,12 @@ PathOption Navigation::pick_arc() {
     // cout << "radius of " << radius << " and clearance "<< path_i.clearance << endl;
 
     // uncomment for debugging, shouldn't be changing how the arcs are looking.
-    visualization::DrawPathOption(i,
-                                  path_i.free_path_length,
-                                  path_i.clearance,
-                                  0,
-                                  false,
-                                  local_viz_msg_);
+    // visualization::DrawPathOption(i,
+    //                               path_i.free_path_length,
+    //                               path_i.clearance,
+    //                               0,
+    //                               false,
+    //                               local_viz_msg_);
 
     
     // calculate clearance around obstacle
