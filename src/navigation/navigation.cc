@@ -219,7 +219,7 @@ void Navigation::Run() {
   // predict current position, odometry
   position_prediction();
 
-  if(!chosen_path) {
+  if(chosen_path.free_path_length != 0) {
     d_max = chosen_path.free_path_length;
     d_curr = 0;
     drive_msg_.curvature = chosen_path.curvature;
@@ -265,7 +265,7 @@ PathOption Navigation::pick_arc() {
   double h = 0.4295 + safety_margin; // add .1 for safety margin
   double w = (0.281 / 2) + safety_margin;
   vector<PathOption> path_options;
-  PathOption best_path_option;
+  PathOption best_path_option = PathOption();
 
   // uncomment for debugging - I need to figure out how to set a nav target
   Eigen::Vector2f goal(10, 0);
@@ -369,7 +369,9 @@ PathOption Navigation::pick_arc() {
   }    
 
   if (prev_score >= best_arc_score) {
-    return nullptr;
+    PathOption empty = PathOption();
+    empty.free_path_length = 0;
+    return empty;
   }
   return best_path_option;
 }
