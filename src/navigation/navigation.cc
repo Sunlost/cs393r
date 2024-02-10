@@ -259,10 +259,10 @@ PathOption Navigation::pick_arc() {
   float arc_score = 0.0; 
   float best_arc_score = -1;
   // float clearance = 0.0;
-  double safety_margin = 0.1;
+  double safety_margin = 0.3;
   double temp_fpl = 100;
   double h = 0.4295 + safety_margin; // add .1 for safety margin
-  double w = (0.281 / 2) + .3;
+  double w = (0.281 / 2) + safety_margin;
   vector<PathOption> path_options;
   PathOption best_path_option = PathOption();
 
@@ -270,7 +270,9 @@ PathOption Navigation::pick_arc() {
     // uncomment for debugging - I need to figure out how to set a nav target
   Eigen::Vector2f goal(20, 0);
 
-  Eigen::Rotation2Df goal_straight(-odom_angle_);
+  Eigen::Rotation2Df goal_straight(-odom_angle);
+
+  goal = goal_straight * goal;
   visualization::DrawCross(goal, .3, 0x239847, local_viz_msg_);
 
   // curvature options from right to left
@@ -363,7 +365,7 @@ PathOption Navigation::pick_arc() {
     
     // calculate clearance around obstacle
     double dtgoal = magnitude(goal.x(), goal.y());
-    arc_score = (path_i.clearance * 50) + (path_i.free_path_length)  + (dtgoal * 25);
+    arc_score = (path_i.clearance * 100) + (path_i.free_path_length)  + (dtgoal * 25);
     if (arc_score > best_arc_score) {
       best_path_option = path_i;
       best_arc_score = arc_score;
