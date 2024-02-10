@@ -33,6 +33,7 @@
 #include "shared/ros/ros_helpers.h"
 #include "navigation.h"
 #include "visualization/visualization.h"
+#include <cassert>
 #include<cmath>
 
 using Eigen::Vector2f;
@@ -204,14 +205,14 @@ PathOption Navigation::pick_arc() {
 
     Eigen::Vector2f center(0, radius); // right = negative value
     double goal_mag = magnitude(goal.x() - center.x(), goal.y() - center.y());
-    Eigen::Vector2f closest_point(
+    Eigen::Vector2f optimal_fpl(
           center.x() + (goal.x() - center.x()) / goal_mag * abs(radius),
           center.y() + (goal.y() - center.y()) / goal_mag * abs(radius)
         );
 
     // uncomment for debugging
-    // visualization::DrawCross(closest_point, .3, 0xab4865, local_viz_msg_);
-    // visualization::DrawLine(closest_point, P, 0, local_viz_msg_);
+    // visualization::DrawCross(optimal_fpl, .3, 0xab4865, local_viz_msg_);
+    // visualization::DrawLine(goal, optimal_fpl, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
     for (Vector2f point : point_cloud_) {
@@ -236,26 +237,27 @@ PathOption Navigation::pick_arc() {
       if ((mag >= r_1 && mag <= r_2) && theta > 0) {
         temp_fpl = min(
           radius * (theta - atan2(h, radius - w)),
-          2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / abs(2 * radius))
+          2 * abs(radius) * asin(magnitude(optimal_fpl.x(), optimal_fpl.y()) / abs(2 * radius))
         );
         if(radius < 0) temp_fpl = min(
           abs(radius * (theta - atan2(h, abs(radius) + w))),
-          abs(2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / 2 * radius))
+          abs(2 * abs(radius) * asin(magnitude(optimal_fpl.x(), optimal_fpl.y()) / (2 * radius)))
         );
 
         // only save the smallest free path length for each curvature
-        // original if placement a la Macy
-          if (temp_fpl < path_i.free_path_length) {
-            path_i.free_path_length = temp_fpl;
-            path_i.closest_point = closest_point;
-            path_i.obstruction = point;
-          }
+        if (temp_fpl < path_i.free_path_length) {
+          path_i.free_path_length = temp_fpl;
+          path_i.obstruction = point;
+        }
         // where the debug draw arc was
 
       } else if ((mag < r_1 || mag > r_2) && theta > 0) { 
       
         /* we know the fpl, so we can see if this the closest point
            need to do some radius checks with mag.
+
+           we have to go with the minimum clearance between both r_1 and r_2, 
+           BUT for all points in the point cloud.
            old magnitude will just be the po's         */
 
         /* the current closest point with which to judge clearance is either
@@ -265,6 +267,7 @@ PathOption Navigation::pick_arc() {
         // cout << "temp clearance "<< temp_clear << endl;
         
         if (temp_clear < path_i.clearance) {
+          //assert(mag <= magnitude(path_i.closest_point.x() - center.x(), path_i.closest_point.y() - center.y()));
           path_i.clearance = temp_clear;
         }
         
@@ -276,22 +279,23 @@ PathOption Navigation::pick_arc() {
     path_options.push_back(path_i);
     // cout << "radius of " << radius << " and clearance "<< path_i.clearance << endl;
 
-    // uncomment for debugging, shouldn't be changing how the arcs are looking.
-    // visualization::DrawPathOption(i,
-    //                               path_i.free_path_length,
-    //                               path_i.clearance,
-    //                               0,
-    //                               false,
-    //                               local_viz_msg_);
+  }    
 
-    
+  // run thru all feasible paths, score them.
+  for(PathOption feasible_path : path_options) {
+    // uncomment for debugging, shouldn't be changing how the arcs are looking.
+    visualization::DrawPathOption(feasible_path.curvature,
+                                  feasible_path.free_path_length,
+                                  feasible_path.clearance,
+                                  0,
+                                  false,
+                                  local_viz_msg_);
+
     // calculate clearance around obstacle
     double dtgoal = magnitude(goal.x(), goal.y());
-
-    //arc_score = (path_i.free_path_length * 10)  + (dtgoal * 1);
-    arc_score = (path_i.clearance * 100) + (path_i.free_path_length * 1)  + (dtgoal * 1);
+    arc_score = (feasible_path.clearance * 10) + (feasible_path.free_path_length)  + (dtgoal * 25);
     if (arc_score > best_arc_score) {
-      best_path_option = path_i;
+      best_path_option = feasible_path;
       best_arc_score = arc_score;
     }
 
