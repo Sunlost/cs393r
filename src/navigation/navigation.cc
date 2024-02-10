@@ -180,18 +180,17 @@ void Navigation::Run() {
 
 
   PathOption chosen_path = pick_arc();
-  // visualization::DrawPathOption(chosen_path.curvature,
-  //                               chosen_path.free_path_length,
-  //                               chosen_path.clearance,
-  //                               0x3EB489,
-  //                               true,
-  //                               local_viz_msg_);
+  visualization::DrawPathOption(chosen_path.curvature,
+                                chosen_path.free_path_length,
+                                chosen_path.clearance,
+                                0x3EB489,
+                                true,
+                                local_viz_msg_);
 
   // cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
   // cout << "chosen path's clearance " << chosen_path.clearance << endl;
 
   // drive_msg_.velocity = 1;
-  drive_msg_.curvature = chosen_path.curvature;
   d_max = chosen_path.free_path_length;
 
   // Eventually, you will have to set the control values to issue drive commands:
@@ -321,19 +320,17 @@ PathOption Navigation::pick_arc() {
     // cout << "radius of " << radius << " and clearance "<< path_i.clearance << endl;
 
     // uncomment for debugging, shouldn't be changing how the arcs are looking.
-    // visualization::DrawPathOption(i,
-    //                               path_i.free_path_length,
-    //                               path_i.clearance,
-    //                               0,
-    //                               false,
-    //                               local_viz_msg_);
+    visualization::DrawPathOption(i,
+                                  path_i.free_path_length,
+                                  path_i.clearance,
+                                  0,
+                                  false,
+                                  local_viz_msg_);
 
     
     // calculate clearance around obstacle
     double dtgoal = magnitude(goal.x(), goal.y());
-
-    //arc_score = (path_i.free_path_length * 10)  + (dtgoal * 1);
-    arc_score = (path_i.clearance * 100) + (path_i.free_path_length * 1)  + (dtgoal * 1);
+    arc_score = (path_i.clearance * 50) + (path_i.free_path_length)  + (dtgoal * 150);
     if (arc_score > best_arc_score) {
       best_path_option = path_i;
       best_arc_score = arc_score;
