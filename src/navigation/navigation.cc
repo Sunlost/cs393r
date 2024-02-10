@@ -290,8 +290,8 @@ PathOption Navigation::pick_arc() {
         );
 
     // uncomment for debugging
-    // visualization::DrawCross(P, .3, 0xab4865, local_viz_msg_);
-    // visualization::DrawLine(goal, P, 0, local_viz_msg_);
+    visualization::DrawCross(closest_point, .3, 0xab4865, local_viz_msg_);
+    visualization::DrawLine(goal, closest_point, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
     for (Vector2f point : point_cloud_) {
@@ -352,12 +352,12 @@ PathOption Navigation::pick_arc() {
     // cout << "radius of " << radius << " and clearance "<< path_i.clearance << endl;
 
     // uncomment for debugging, shouldn't be changing how the arcs are looking.
-    // visualization::DrawPathOption(i,
-    //                               path_i.free_path_length,
-    //                               path_i.clearance,
-    //                               0,
-    //                               false,
-    //                               local_viz_msg_);
+    visualization::DrawPathOption(i,
+                                  path_i.free_path_length,
+                                  path_i.clearance,
+                                  0,
+                                  false,
+                                  local_viz_msg_);
 
     
     // calculate clearance around obstacle
@@ -374,6 +374,7 @@ PathOption Navigation::pick_arc() {
     empty.free_path_length = INFINITY;
     return empty;
   }
+  best_path_option.free_path_length = fabs(best_path_option.free_path_length);
   return best_path_option;
 }
 
