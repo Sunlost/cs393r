@@ -224,6 +224,7 @@ void Navigation::Run() {
     d_curr = 0;
     drive_msg_.curvature = chosen_path.curvature;
     d_curr_pred = 0;
+    phase = PHASE_ACCEL;
   }
 
 
