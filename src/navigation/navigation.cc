@@ -190,8 +190,9 @@ void Navigation::Run() {
   // cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
   // cout << "chosen path's clearance " << chosen_path.clearance << endl;
 
-  drive_msg_.velocity = 1;
+  // drive_msg_.velocity = 1;
   drive_msg_.curvature = chosen_path.curvature;
+  d_max = chosen_path.free_path_length;
 
   // Eventually, you will have to set the control values to issue drive commands:
   // drive_msg_.curvature = ...;
@@ -227,9 +228,10 @@ PathOption Navigation::pick_arc() {
   float arc_score = 0.0; 
   float best_arc_score = -1;
   // float clearance = 0.0;
+  double safety_margin = 0.1;
   double temp_fpl = 100;
-  double h = 0.4295 + .1; // add .1 for safety margin
-  double w = 0.281 / 2 + .1;
+  double h = 0.4295 + safety_margin; // add .1 for safety margin
+  double w = (0.281 / 2) + safety_margin;
   vector<PathOption> path_options;
   PathOption best_path_option;
 
@@ -340,6 +342,10 @@ PathOption Navigation::pick_arc() {
   }    
     return best_path_option;
   }
+
+// Eigen::Vector2f future_loc_arc() {
+
+// }
 
 // calculate what phase of ToC we are in, ^"update state
 void Navigation::toc1dstraightline(const PathOption& chosen_path) {
