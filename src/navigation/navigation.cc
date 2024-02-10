@@ -126,7 +126,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   d_max = 3.65;
 
   // max velocity: 1.0 m/s
-  v_max = 0.4;
+  v_max = 1.0;
   // max acceleration: 4.0 m/s^2
   a_max = 4.0;
   // max deceleration: 4.0 m/s^2
@@ -200,12 +200,12 @@ void Navigation::Run() {
 
 
   PathOption chosen_path = pick_arc();
-  // visualization::DrawPathOption(chosen_path.curvature,
-  //                               chosen_path.free_path_length,
-  //                               chosen_path.clearance,
-  //                               0x3EB489,
-  //                               true,
-  //                               local_viz_msg_);
+  visualization::DrawPathOption(chosen_path.curvature,
+                                chosen_path.free_path_length,
+                                chosen_path.clearance,
+                                0x3EB489,
+                                true,
+                                local_viz_msg_);
 
   // cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
   // cout << "chosen path's clearance " << chosen_path.clearance << endl;
@@ -215,7 +215,7 @@ void Navigation::Run() {
   // cout << "chosen path's clearance " << chosen_path.clearance << endl;
   // cout << endl;
 
-  // drive_msg_.velocity = 1;
+  drive_msg_.velocity = 1.0;
   // predict current position, odometry
   position_prediction();
 
@@ -259,8 +259,8 @@ PathOption Navigation::pick_arc() {
   float arc_score = 0.0; 
   float best_arc_score = -1;
   // float clearance = 0.0;
-  double safety_margin = 0.3;
-  double temp_fpl = 100;
+  double safety_margin = 0.1;
+  double temp_fpl;
   double h = 0.4295 + safety_margin; // add .1 for safety margin
   double w = (0.281 / 2) + safety_margin;
   vector<PathOption> path_options;
@@ -281,7 +281,7 @@ PathOption Navigation::pick_arc() {
 
     PathOption path_i = PathOption();
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
-    path_i.free_path_length = 100; // init to some high value
+    path_i.free_path_length = INFINITY; // init to some high value
     path_i.clearance = 1000;
     path_i.curvature = i;
 
@@ -293,8 +293,8 @@ PathOption Navigation::pick_arc() {
         );
 
     // uncomment for debugging
-    visualization::DrawCross(closest_point, .3, 0xab4865, local_viz_msg_);
-    visualization::DrawLine(goal, closest_point, 0, local_viz_msg_);
+    // visualization::DrawCross(closest_point, .3, 0xab4865, local_viz_msg_);
+    // visualization::DrawLine(goal, closest_point, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
     for (Vector2f point : point_cloud_) {
@@ -351,26 +351,31 @@ PathOption Navigation::pick_arc() {
       }
     }
 
-    path_options.push_back(path_i);
+    // only save paths that are feasible at this point
+    if (path_i.free_path_length != INFINITY && path_i.free_path_length > 0) {
+      path_options.push_back(path_i);
+    }
     // cout << "radius of " << radius << " and clearance "<< path_i.clearance << endl;
 
+  }    
+
+  // run thru all feasible paths, score them.
+  for(unsigned int index = 0; index < path_options.size(); index++) {
     // uncomment for debugging, shouldn't be changing how the arcs are looking.
-    visualization::DrawPathOption(i,
-                                  path_i.free_path_length,
-                                  path_i.clearance,
+    visualization::DrawPathOption(path_options[index].curvature,
+                                  path_options[index].free_path_length,
+                                  path_options[index].clearance,
                                   0,
                                   false,
                                   local_viz_msg_);
-
-    
     // calculate clearance around obstacle
     double dtgoal = magnitude(goal.x(), goal.y());
-    arc_score = (path_i.clearance * 100) + (path_i.free_path_length)  + (dtgoal * 25);
+    arc_score = (path_options[index].clearance * 10) + (path_options[index].free_path_length)  + (dtgoal * 25);
     if (arc_score > best_arc_score) {
-      best_path_option = path_i;
+      best_path_option = path_options[index];
       best_arc_score = arc_score;
     }
-  }    
+  }
 
   if (prev_score >= best_arc_score) {
     PathOption empty = PathOption();
