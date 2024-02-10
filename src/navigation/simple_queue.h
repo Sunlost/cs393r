@@ -24,6 +24,7 @@
 #include <sys/types.h>
 #include <utility>
 #include <vector>
+#include <tuple>
 
 #ifndef MUTABLE_QUEUE
 #define MUTABLE_QUEUE
@@ -31,53 +32,29 @@
 using std::deque;
 using std::pair;
 using std::make_pair;
+using std::tuple;
+using std::make_tuple;
 
-template<class Value, class Priority>
+template<class CycleNum, class Velocity, class Curvature>
 class SimpleQueue {
  private:
   public:
   // Insert a new value, with the specified priority. If the value
   // already exists, its priority is updated.
-  void Push(const Value& v, const Priority& p) {
-    // for (auto& x : values_) {
-    //   // If the value already exists, update its priority, re-sort the priority
-    //   // queue, and return.
-    //   if (x.first == v) {
-    //     x.second = p;
-    //     Sort();
-    //     return;
-    //   }
-    // }
-    // Find where this value should go, and insert it there.
-    // for (size_t i = 0; i < values_.size(); ++i) {
-    //   if (values_[i].second > p) {
-    //     values_.insert(values_.begin() + i, make_pair(v, p));
-    //     return;
-    //   }
-    // }
-    // values_.insert(values_.end(), make_pair(v, p));
-    values_.push_back(make_pair(v, p));
+  void Push(const CycleNum& n, const Velocity& v, const Curvature& c) {
+    values_.push_back(make_tuple(n, v, c));
   }
-
-  // Sorts the priorities.
-  // void Sort() {
-  //   static const auto comparator = 
-  //       [](const pair<Value, Priority>& v1, const pair<Value, Priority>& v2) {
-  //     return (v1.second < v2.second);
-  //   };
-  //   sort(values_.begin(), values_.end(), comparator);
-  // }
-
+  
   // Retreive the value with the highest priority.
-  Value Pop() {
+  pair<Velocity, Curvature> Pop() {
     if (values_.empty()) {
       fprintf(stderr, "ERROR: Pop() called on an empty queue!\n");
       exit(1);
     }
-    // Sort();
-    const Value v = values_.front().first;
+    const Velocity v = std::get<1>(values_.front());
+    const Curvature p = std::get<2>(values_.front());
     values_.pop_front();
-    return v;
+    return make_pair(v, p);
   }
 
   // Returns true iff the priority queue is empty.
@@ -86,9 +63,9 @@ class SimpleQueue {
   }
 
   // Returns true iff the provided value is already on the queue.
-  bool Exists(const Value& v) {
+  bool Exists(const CycleNum& n) {
     for (const auto& x : values_) {
-      if (x.first == v) return true;
+      if (x.first == n) return true;
     }
     return false;
   }
@@ -97,7 +74,7 @@ class SimpleQueue {
     return (unsigned) values_.size();
   }
 
-  deque<pair<Value, Priority> > values_;
+  deque<tuple<CycleNum, Velocity, Curvature>> values_;
 };
 
 #endif  // MUTABLE_QUEUE

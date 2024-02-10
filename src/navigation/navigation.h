@@ -73,6 +73,7 @@ class Navigation {
 
   // handles all 1dtoc motion. sets velocity.
   void toc1dstraightline();
+  void position_prediction();
   enum tocPhases { PHASE_ACCEL = 1, PHASE_CRUISE = 2, PHASE_DECEL = 3 };
   tocPhases phase; 
 
