@@ -95,22 +95,15 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
   // msg.range_max // Maximum observable range
   // msg.range_min // Minimum observable range
   // msg.ranges[i] // The range of the i'th ray
-  
-  // cout << "angleinc" << msg.angle_increment << endl;
-  // cout << "anglemax" << msg.angle_max << endl;
-  // cout << "anglemin" << msg.angle_min << endl;
-  // cout << "rangemax" << msg.range_max << endl;
-  // cout << "rangemin" << msg.range_min << endl;
-  // cout << "range" << msg.ranges.size() << endl;
-  // cout << "range" << msg.ranges.at(0) << endl;
-  // cout << "range" << msg.ranges.at(1) << endl;
-  //   cout << "whynotchange" << msg.ranges.at(353) << endl;
+
   point_cloud_.clear();
   for (size_t i = 0; i < msg.ranges.size(); i++) {
-    float theta_i = msg.angle_max - msg.angle_increment * i;
+    float theta_i = msg.angle_min + msg.angle_increment * i;
 
-    Eigen::Vector2f p_i(msg.ranges.at(i) * cos(theta_i + laser_rotation) + kLaserLoc.x(),
-                        msg.ranges.at(i) * sin(theta_i + laser_rotation) + kLaserLoc.y());
+    /* Trying to add laser's rotation from car's odom_angle or robot_angle
+    really messes with point cloud accuracy. Macy & Sun were right. */
+    Eigen::Vector2f p_i(msg.ranges.at(i) * cos(theta_i) + kLaserLoc.x(),
+                        msg.ranges.at(i) * sin(theta_i) + kLaserLoc.y());
     point_cloud_.push_back(p_i);
   }
   navigation_->ObservePointCloud(point_cloud_, msg.header.stamp.toSec());
@@ -122,7 +115,6 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
     printf("Odometry t=%f\n", msg.header.stamp.toSec());
   }
 
-  laser_rotation  = 2.0 * atan2(msg.pose.pose.orientation.z, msg.pose.pose.orientation.w);
   navigation_->UpdateOdometry(
       Vector2f(msg.pose.pose.position.x, msg.pose.pose.position.y),
       2.0 * atan2(msg.pose.pose.orientation.z, msg.pose.pose.orientation.w),
@@ -151,6 +143,7 @@ void LocalizationCallback(const amrl_msgs::Localization2DMsg msg) {
   if (FLAGS_v > 0) {
     printf("Localization t=%f\n", GetWallTime());
   }
+  laser_rotation = msg.pose.theta;
   navigation_->UpdateLocation(Vector2f(msg.pose.x, msg.pose.y), msg.pose.theta);
 }
 

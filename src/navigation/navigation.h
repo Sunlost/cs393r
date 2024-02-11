@@ -35,9 +35,9 @@ namespace ros {
 namespace navigation {
 
 struct PathOption {
-  float curvature;
-  float clearance;
-  float free_path_length;
+  double curvature;
+  double clearance;
+  double free_path_length;
   Eigen::Vector2f obstruction;
   Eigen::Vector2f closest_point;
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
@@ -74,6 +74,15 @@ class Navigation {
   // handles all 1dtoc motion. sets velocity.
   PathOption pick_arc();
 
+  // stuff written by us
+
+  // handles all 1dtoc motion. sets velocity.
+  void toc1dstraightline();
+  void position_prediction();
+  enum tocPhases { PHASE_ACCEL = 1, PHASE_CRUISE = 2, PHASE_DECEL = 3 };
+  tocPhases phase; 
+
+  // =-=-=-=-=-=-=
 
  private:
 
