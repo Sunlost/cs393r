@@ -187,10 +187,6 @@ PathOption Navigation::pick_arc() {
   // return the best arc
   float arc_score = 0.0; 
   float best_arc_score = -1;
-  // float clearance = 0.0;
-  double temp_fpl = 100;
-  double h = 0.4295 + .1; // add .1 for safety margin
-  double w = 0.281 / 2 + .1;
   vector<PathOption> path_options;
   PathOption best_path_option;
 
@@ -240,7 +236,7 @@ PathOption Navigation::pick_arc() {
 
       // if the point lies within car's swept volume
       if ((mag >= r_1 && mag <= r_2) && theta > 0) {
-        temp_fpl = min(
+        double temp_fpl = min(
           radius * (theta - atan2(h, radius - w)),
           2 * abs(radius) * asin(magnitude(optimal_fpl.x(), optimal_fpl.y()) / abs(2 * radius))
         );
