@@ -288,8 +288,8 @@ PathOption Navigation::pick_arc() {
   // +ve x is forward for robot, +ve y is left
   // +ve angle rot. is to robot's left.
   
-  //Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle_diff);
-  Eigen::Affine2f a_map_robot = Eigen::Translation2f(map_car_loc_diff.x() , map_car_loc_diff.y()) * Eigen::Rotation2Df(-map_car_angle_diff);
+  Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle_diff);
+  //Eigen::Affine2f a_map_robot = Eigen::Translation2f(-abs(map_car_loc_diff.x()) , -abs(map_car_loc_diff.y())) * Eigen::Rotation2Df(-map_car_angle_diff);
 
   // We want to zero out the point
   Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
@@ -362,15 +362,6 @@ PathOption Navigation::pick_arc() {
         // where the debug draw arc was
       } else if ((fabs(mag) < fabs(r_1) || fabs(mag) > fabs(r_2)) && theta > 0) { 
       
-        /* we know the fpl, so we can see if this the closest point
-           need to do some radius checks with mag.
-
-           we have to go with the minimum clearance between both r_1 and r_2, 
-           BUT for all points in the point cloud.
-           old magnitude will just be the po's         */
-
-        /* the current closest point with which to judge clearance is either
-           less than r1 or greater than r2 */
         // Need to double check the math before this so these values will be correct
         double temp_clear = (fabs(mag) < fabs(r_1)) ? fabs(r_1) - fabs(mag)  : fabs(mag) - fabs(r_2);
 
@@ -385,43 +376,52 @@ PathOption Navigation::pick_arc() {
     }
 
     // We want feasible paths only.
-    if (path_i.free_path_length != INFINITY && path_i.free_path_length > 0) {
+    if (path_i.free_path_length == INFINITY) {
+      path_i.free_path_length = map_goal.x();
+    }
+    if (path_i.free_path_length > 0) {
       path_options.push_back(path_i);
     }
     // cout << "radius of " << radius << " and clearance "<< path_i.clearance << endl;
   }    
 
   // run thru all feasible paths, score them.
-  for(PathOption feasible_path : path_options) {
+  printf("\nIn Pick Arc, feasible arcs\n");
+  
+  unsigned best_i = 0;
+  for(unsigned i = 0; i < path_options.size(); i++) {
     // uncomment for debugging, shouldn't be changing how the arcs are looking.
-    visualization::DrawPathOption(feasible_path.curvature,
-                                  feasible_path.free_path_length,
-                                  feasible_path.clearance,
+    visualization::DrawPathOption(path_options.at(i).curvature,
+                                  path_options.at(i).free_path_length,
+                                  path_options.at(i).clearance,
                                   0,
                                   false,
                                   local_viz_msg_);
 
     // calculate clearance around obstacle
     // use robot_rel_goal and fpl_cutoff_point
-    double dtgoal =  magnitude(robot_rel_goal.x() - feasible_path.closest_point.x(), 
-                               robot_rel_goal.y() - feasible_path.closest_point.y());
-    arc_score = (feasible_path.clearance * 100) + (feasible_path.free_path_length)  + (dtgoal * 25);
+    double dtgoal =  magnitude(robot_rel_goal.x() - path_options.at(i).closest_point.x(), 
+                               robot_rel_goal.y() - path_options.at(i).closest_point.y());
+    arc_score = (path_options.at(i).clearance * 100) + (path_options.at(i).free_path_length)  + (dtgoal * 2);
+
+    printf("Arc %d, curvature = %f, fpl = %f, clearance = %f \n", i, path_options.at(i).curvature, path_options.at(i).free_path_length, path_options.at(i).clearance);
 
     //printf("dtgoal = %f\n", dtgoal);
-    if (dtgoal <= 0.00001) {
-      //printf("/n dtgoal = %f\n", dtgoal);
-      return empty;
-    }
+    // if (dtgoal <= 0.00001) {
+    //   //printf("/n dtgoal = %f\n", dtgoal);
+    //   return empty;
+    // }
 
     if (arc_score > best_arc_score) {
-      best_path_option = feasible_path;
+      best_i = i;
+      best_path_option = path_options.at(i);
       best_arc_score = arc_score;
     }
   }    
-
+  printf("\n");
   printf("\nIn Pick Arc\n");
   printf("Previous Score %f\n", prev_score);
-  printf("Current Score %f\n\n", best_arc_score);
+  printf("Current Score %f, Arc %d \n\n", best_arc_score, best_i);
   if (prev_score >= best_arc_score) {
     return empty;
   } else {
