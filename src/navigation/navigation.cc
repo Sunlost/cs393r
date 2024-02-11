@@ -89,8 +89,8 @@ bool debug_print;
 
 namespace navigation {
 
-// PathOption prev_path;
-// double prev_score;
+PathOption prev_path;
+double prev_score;
 PathOption curr_path;
 double curr_score;
 double h = 0.4295 + .1;
@@ -196,13 +196,6 @@ void Navigation::Run() {
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) return;
 
-  // here is where we should be able to see the obstacle and the goal. what does that mean?
-  // The control iteration goes here. 
-  // Feel free to make helper functions to structure the control appropriately.
-  
-  // The latest observed point cloud is accessible via "point_cloud_"
-
-
   curr_path = pick_arc();
   visualization::DrawPathOption(curr_path.curvature,
                                 curr_path.free_path_length,
@@ -223,8 +216,8 @@ void Navigation::Run() {
   // predict current position, odometry
   position_prediction();
 
-  if(curr_path.free_path_length != -INFINITY) {
-    // going to make a change, save prev path vars.
+  // going to make a change, save prev path vars.
+  if (curr_path.free_path_length != INFINITY) {
     d_max = curr_path.free_path_length;
     d_curr = 0;
     drive_msg_.curvature = curr_path.curvature;
@@ -232,7 +225,6 @@ void Navigation::Run() {
     d_curr_pred = 0;
     phase = PHASE_ACCEL;
   }
-
 
   // Eventually, you will have to set the control values to issue drive commands:
   // drive_msg_.curvature = ...;
@@ -385,20 +377,18 @@ PathOption Navigation::pick_arc() {
     }
   }    
 
-  // if (prev_score >= best_arc_score) {
-  //   PathOption empty = PathOption();
-  //   empty.free_path_length = -INFINITY;
-  //   return empty;
-  // } else {
+  if (prev_score >= best_arc_score) {
+    PathOption empty = PathOption();
+    empty.free_path_length = -INFINITY;
+    return empty;
+  } else {
     // already have removed all -ve fpl'd paths
     curr_score = best_arc_score;
     curr_path = best_path_option;
     return best_path_option;
-  // }
+  }
 }
 
-// calculate what phase of ToC we are in, ^"update state
-// void Navigation::toc1dstraightline() {
 void Navigation::position_prediction() {
   // TODO: add additional past command logging to reconcile with LIDAR delay
 
