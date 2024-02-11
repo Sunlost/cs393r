@@ -210,6 +210,8 @@ void Navigation::Run() {
   printf("chosen path's closest %f\n", curr_path.clearance);
   printf("chosen path's obstruction %f\n", curr_path.free_path_length);
   printf("chosen path's clearance %f\n", curr_path.clearance);
+  printf("Previous Score %f\n", prev_score);
+  printf("Current Score %f\n", curr_score);
   printf("\n");
 
   // drive_msg_.velocity = 1.0;
@@ -224,6 +226,9 @@ void Navigation::Run() {
     printf("curvature set to %f\n", drive_msg_.curvature);
     d_curr_pred = 0;
     phase = PHASE_ACCEL;
+    // prepare for next cycle
+    prev_path = curr_path;
+    prev_score = curr_score;
   }
 
   // Eventually, you will have to set the control values to issue drive commands:
@@ -232,9 +237,6 @@ void Navigation::Run() {
 
   cycle_num++;
 
-  // // prepare for next cycle
-  // prev_path = curr_path;
-  // prev_score = curr_score;
 
   // handle 1d toc
   toc1dstraightline();
@@ -370,7 +372,7 @@ PathOption Navigation::pick_arc() {
 
     // calculate clearance around obstacle
     double dtgoal = magnitude(goal.x(), goal.y());
-    arc_score = (feasible_path.clearance * 100) + (feasible_path.free_path_length)  + (dtgoal * 25);
+    arc_score = (feasible_path.clearance * 100) + (feasible_path.free_path_length)  + (dtgoal * 2550);
     if (arc_score > best_arc_score) {
       best_path_option = feasible_path;
       best_arc_score = arc_score;
