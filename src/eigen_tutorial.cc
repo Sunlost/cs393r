@@ -44,7 +44,7 @@ void DemoBasics() {
 void DemoRotations() {
   cout << "Rotations demonstration" << endl;
   // Note that pi/4 radians is 45 degrees.
-  float angle1 = M_PI / 4.0;
+  float angle1 = atan2(4, 3);
   cout << "angle1 = " << angle1 << " radians = "
        << angle1 / M_PI * 180.0 << " degrees." << endl;
 
@@ -52,7 +52,7 @@ void DemoRotations() {
   Rotation2Df r1(angle1);
 
   cout << "Apply that rotation to a vector" << endl;
-  Vector2f v1(1.0, 0);
+  Vector2f v1(5, 0);
   Vector2f v2 = r1 * v1;
   cout << v2 << "\n";
 
@@ -63,15 +63,28 @@ void DemoRotations() {
 
 void DemoTFs() {
   Eigen::Affine2f a_r2_r1;
-  a_r2_r1 = Eigen::Translation2f(2, 3) * Eigen::Rotation2Df(M_PI);
-  Vector2f v1 (1, 0);
+  a_r2_r1 = Eigen::Translation2f(3, 4) * Eigen::Rotation2Df(std::atan2(4, 3));
+  Vector2f v1 (3, 4);
   Vector2f v2 = a_r2_r1 * v1;
-  cout << v2;
+  cout << v2 << endl;
+
+  a_r2_r1 = Eigen::Translation2f(3, 4) * Eigen::Rotation2Df(std::atan2(4, 3));
+  v1 = Vector2f(5, 0);
+  v2 = a_r2_r1 * v1;
+  cout << v2 << endl;
+
+
+  //        distance to the dest. frame         angle needed to go from src x-axis frame to dest. x-axis frame
+  a_r2_r1 = Eigen::Translation2f(3, 4) * Eigen::Rotation2Df(std::atan2(4, 3));
+  v1 = Vector2f(10, 0);
+  v2 = a_r2_r1 * v1;
+  cout << v2 << endl;
 }
 
+
 int main() {
-  cout << "Basics: Vectors and Matrices.\n";
-  DemoBasics();
+  // cout << "Basics: Vectors and Matrices.\n";
+  // DemoBasics();
 
   cout << "\n\n\nDifferent representations of rotation.\n";
   DemoRotations();

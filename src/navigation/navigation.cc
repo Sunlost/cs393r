@@ -39,6 +39,8 @@
 #include <eigen3/Eigen/src/Core/GenericPacketMath.h>
 #include <eigen3/Eigen/src/Core/Matrix.h>
 #include <eigen3/Eigen/src/Geometry/Rotation2D.h>
+#include <eigen3/Eigen/src/Geometry/Transform.h>
+#include <eigen3/Eigen/src/Geometry/Translation.h>
 #include <sys/types.h>
 #include <tuple>
 #include "simple_queue.h"
@@ -93,8 +95,10 @@ PathOption prev_path;
 double prev_score;
 PathOption curr_path;
 double curr_score;
-double h = 0.4295 + .1;
-double w = 0.281 / 2 + .1;
+double safety_margin = .2;
+double h = 0.4295 + safety_margin;
+double w = (0.281 / 2) + safety_margin;
+const Eigen::Vector2f map_goal(20, 0);
 //                  curvature clearance   fpl     obstruction                 closest
 const PathOption empty = {  0, -INFINITY, INFINITY, Eigen::Vector2f(0,0), Eigen::Vector2f(0,0) };
 
@@ -209,10 +213,9 @@ void Navigation::Run() {
   printf("\nchosen path's fpl %f\n", curr_path.free_path_length);
   printf("chosen path's clearance %f\n", curr_path.clearance);
   printf("chosen path's curvature %f\n", curr_path.curvature);
-  printf("chosen path's closest %f, %f\n", curr_path.closest_point.x(), curr_path.closest_point.y());
-  printf("chosen path's obstruction %f, %f\n", curr_path.obstruction.x(), curr_path.obstruction.y());
-  printf("Previous Score %f\n", prev_score);
-  printf("Current Score %f\n\n", curr_score);
+  printf("chosen path's optimal cutoff %f, %f\n", curr_path.closest_point.x(), curr_path.closest_point.y());
+  printf("chosen path's obstruction %f, %f\n\n", curr_path.obstruction.x(), curr_path.obstruction.y());
+
 
   // drive_msg_.velocity = 1.0;
   // predict current position, odometry
@@ -229,8 +232,8 @@ void Navigation::Run() {
     // prepare for next cycle
     prev_path = curr_path;
     prev_score = curr_score;
-    // curr_path = empty;
-    // curr_score = -1;
+    curr_path = empty;
+    curr_score = -1;
   }
 
   // Eventually, you will have to set the control values to issue drive commands:
@@ -258,9 +261,6 @@ float magnitude(double x, double y) {
 }
 
 PathOption Navigation::pick_arc() {
-  // prev_path = curr_path;
-  // prev_score = curr_score;
-
   // for loop of arcs
   // for each arc, calc score
   // return the best arc
@@ -272,30 +272,56 @@ PathOption Navigation::pick_arc() {
   PathOption best_path_option = PathOption();
   best_path_option.free_path_length = INFINITY;
 
-  // uncomment for debugging - I need to figure out how to set a nav target
-  Eigen::Vector2f goal(10, 0);
-  visualization::DrawCross(goal, .3, 0x239847, local_viz_msg_);
+  // need to take the map goal, turn it into robot relative goal
+  //        distance to the dest. frame         angle needed to go from src x-axis frame to dest. x-axis frame
+  // we also have to translate the point closer to the robot based off of how far we have traveled.
+  // printf("\nOdom_start_loc %f %f\n", odom_start_loc_.x(), odom_start_loc_.y());
+  // printf("Odom_loc %f %f\n", odom_loc_.x(), odom_loc_.y());
+  // printf("Odom_loc \"zeroed\" %f %f\n", odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
+  // printf("Odom_angle %f\n", odom_angle_);
+  // printf("Odom_angle \"zeroed\" %f\n", odom_angle_ - odom_start_angle_);
+  // printf("robot_loc %f %f\n", robot_loc_.x(), robot_loc_.y());
+  // printf("robot_angle %f\n\n", robot_angle_ );
+
+  double map_car_angle_diff = odom_angle_ - odom_start_angle_;
+  Eigen::Vector2f map_car_loc_diff(odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
+  // +ve x is forward for robot, +ve y is left
+  // +ve angle rot. is to robot's left.
+  
+  //Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle_diff);
+  Eigen::Affine2f a_map_robot = Eigen::Translation2f(map_car_loc_diff.x() , map_car_loc_diff.y()) * Eigen::Rotation2Df(-map_car_angle_diff);
+
+  // We want to zero out the point
+  Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
+
+  // DOn't we need move the 
+
+  visualization::DrawCross(robot_rel_goal, .3, 0x239847, local_viz_msg_);
 
   // curvature options from right to left
   // max curvature is 1
   for(double i = -1; i <= 1; i += 0.1) {
-
+    // init path vars
     PathOption path_i = PathOption();
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
     path_i.free_path_length = INFINITY; // init to some high value
     path_i.clearance = INFINITY;
     path_i.curvature = i;
+    
+    Eigen::Vector2f center(0, radius); 
 
-    Eigen::Vector2f center(0, radius); // right = negative value
-    double goal_mag = magnitude(goal.x() - center.x(), goal.y() - center.y());
-    Eigen::Vector2f optimal_fpl(
-          center.x() + (goal.x() - center.x()) / goal_mag * abs(radius),
-          center.y() + (goal.y() - center.y()) / goal_mag * abs(radius)
+    double goal_mag = magnitude(robot_rel_goal.x() - center.x(), robot_rel_goal.y() - center.y());
+    // double check these calculations
+    Eigen::Vector2f fpl_cutoff_point(
+          center.x() + (robot_rel_goal.x() - center.x()) / goal_mag * abs(radius),
+          center.y() + (robot_rel_goal.y() - center.y()) / goal_mag * abs(radius)
         );
 
+     path_i.closest_point = fpl_cutoff_point;
+
     // uncomment for debugging
-    // visualization::DrawCross(optimal_fpl, .3, 0xab4865, local_viz_msg_);
-    // visualization::DrawLine(goal, optimal_fpl, 0, local_viz_msg_);
+    // visualization::DrawCross(fpl_cutoff_point, .3, 0xab4865, local_viz_msg_);
+    // visualization::DrawLine(robot_rel_goal, fpl_cutoff_point, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
     for (Vector2f point : point_cloud_) {
@@ -316,15 +342,16 @@ PathOption Navigation::pick_arc() {
         theta = atan2(point.x(), point.y() - radius);
       }
 
+      // Double check these calculations
       // if the point lies within car's swept volume
       if ((mag >= r_1 && mag <= r_2) && theta > 0) {
         temp_fpl = min(
           radius * (theta - atan2(h, radius - w)),
-          2 * abs(radius) * asin(magnitude(optimal_fpl.x(), optimal_fpl.y()) / abs(2 * radius))
+          2 * abs(radius) * asin(magnitude(fpl_cutoff_point.x(), fpl_cutoff_point.y()) / abs(2 * radius))
         );
         if(radius < 0) temp_fpl = min(
           abs(radius * (theta - atan2(h, abs(radius) + w))),
-          abs(2 * abs(radius) * asin(magnitude(optimal_fpl.x(), optimal_fpl.y()) / (2 * radius)))
+          abs(2 * abs(radius) * asin(magnitude(fpl_cutoff_point.x(), fpl_cutoff_point.y()) / (2 * radius)))
         );
 
         // only save the smallest free path length for each curvature
@@ -344,14 +371,12 @@ PathOption Navigation::pick_arc() {
 
         /* the current closest point with which to judge clearance is either
            less than r1 or greater than r2 */
-        
-        // TODO Fix negative clearances
+        // Need to double check the math before this so these values will be correct
         double temp_clear = (fabs(mag) < fabs(r_1)) ? fabs(r_1) - fabs(mag)  : fabs(mag) - fabs(r_2);
 
         // cout << "temp clearance "<< temp_clear << endl;
         
         if (temp_clear < path_i.clearance) {
-          path_i.closest_point = point;
           path_i.clearance = temp_clear;
         }
       }
@@ -377,14 +402,26 @@ PathOption Navigation::pick_arc() {
                                   local_viz_msg_);
 
     // calculate clearance around obstacle
-    double dtgoal = magnitude(goal.x(), goal.y());
+    // use robot_rel_goal and fpl_cutoff_point
+    double dtgoal =  magnitude(robot_rel_goal.x() - feasible_path.closest_point.x(), 
+                               robot_rel_goal.y() - feasible_path.closest_point.y());
     arc_score = (feasible_path.clearance * 100) + (feasible_path.free_path_length)  + (dtgoal * 25);
+
+    //printf("dtgoal = %f\n", dtgoal);
+    if (dtgoal <= 0.00001) {
+      //printf("/n dtgoal = %f\n", dtgoal);
+      return empty;
+    }
+
     if (arc_score > best_arc_score) {
       best_path_option = feasible_path;
       best_arc_score = arc_score;
     }
   }    
 
+  printf("\nIn Pick Arc\n");
+  printf("Previous Score %f\n", prev_score);
+  printf("Current Score %f\n\n", best_arc_score);
   if (prev_score >= best_arc_score) {
     return empty;
   } else {
