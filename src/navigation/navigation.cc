@@ -141,7 +141,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   d_max = 3.65;
 
   // max velocity: 1.0 m/s
-  v_max = 0.4;
+  v_max = 1.0;
   // max acceleration: 4.0 m/s^2
   a_max = 4.0;
   // max deceleration: 4.0 m/s^2
@@ -213,11 +213,11 @@ void Navigation::Run() {
                                 true,
                                 local_viz_msg_);
 
-  printf("\nchosen path's fpl %f\n", curr_path.free_path_length);
-  printf("chosen path's clearance %f\n", curr_path.clearance);
-  printf("chosen path's curvature %f\n", curr_path.curvature);
-  printf("chosen path's optimal cutoff %f, %f\n", curr_path.closest_point.x(), curr_path.closest_point.y());
-  printf("chosen path's obstruction %f, %f\n\n", curr_path.obstruction.x(), curr_path.obstruction.y());
+  if (debug_print) printf("\nchosen path's fpl %f\n", curr_path.free_path_length);
+  if (debug_print) printf("chosen path's clearance %f\n", curr_path.clearance);
+  if (debug_print) printf("chosen path's curvature %f\n", curr_path.curvature);
+  if (debug_print) printf("chosen path's optimal cutoff %f, %f\n", curr_path.closest_point.x(), curr_path.closest_point.y());
+  if (debug_print) printf("chosen path's obstruction %f, %f\n\n", curr_path.obstruction.x(), curr_path.obstruction.y());
 
   // drive_msg_.velocity = 1.0;
   // predict current position, odometry
@@ -228,7 +228,7 @@ void Navigation::Run() {
     d_max = curr_path.free_path_length;
     d_curr = 0;
     drive_msg_.curvature = curr_path.curvature;
-    printf("curvature set to %f\n", drive_msg_.curvature);
+    if (debug_print) printf("curvature set to %f\n", drive_msg_.curvature);
     d_curr_pred = 0;
     phase = PHASE_ACCEL;
     // prepare for next cycle
@@ -276,13 +276,13 @@ PathOption Navigation::pick_arc() {
   // need to take the map goal, turn it into robot relative goal
   //        distance to the dest. frame         angle needed to go from src x-axis frame to dest. x-axis frame
   // we also have to translate the point closer to the robot based off of how far we have traveled.
-  // printf("\nOdom_start_loc %f %f\n", odom_start_loc_.x(), odom_start_loc_.y());
-  // printf("Odom_loc %f %f\n", odom_loc_.x(), odom_loc_.y());
-  // printf("Odom_loc \"zeroed\" %f %f\n", odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
-  // printf("Odom_angle %f\n", odom_angle_);
-  // printf("Odom_angle \"zeroed\" %f\n", odom_angle_ - odom_start_angle_);
-  // printf("robot_loc %f %f\n", robot_loc_.x(), robot_loc_.y());
-  // printf("robot_angle %f\n\n", robot_angle_ );
+  // if (debug_print) printf("\nOdom_start_loc %f %f\n", odom_start_loc_.x(), odom_start_loc_.y());
+  // if (debug_print) printf("Odom_loc %f %f\n", odom_loc_.x(), odom_loc_.y());
+  // if (debug_print) printf("Odom_loc \"zeroed\" %f %f\n", odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
+  // if (debug_print) printf("Odom_angle %f\n", odom_angle_);
+  // if (debug_print) printf("Odom_angle \"zeroed\" %f\n", odom_angle_ - odom_start_angle_);
+  // if (debug_print) printf("robot_loc %f %f\n", robot_loc_.x(), robot_loc_.y());
+  // if (debug_print) printf("robot_angle %f\n\n", robot_angle_ );
 
   double map_car_angle_diff = odom_angle_ - odom_start_angle_;
   Eigen::Vector2f map_car_loc_diff(odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
@@ -311,9 +311,21 @@ PathOption Navigation::pick_arc() {
     Eigen::Vector2f center(0, radius); // right = negative value
     double goal_mag = magnitude(robot_rel_goal.x() - center.x(), robot_rel_goal.y() - center.y());
     bool mirrored = false;
+
+    if (radius < 0.0) {
+      mirrored = true;
+      radius = -1 * radius; 
+    } 
+
+    // double check?
+    Eigen::Vector2f opt_fpl_cutoff(
+      center.x() + (robot_rel_goal.x() - center.x()) / goal_mag * radius,
+      center.y() + (robot_rel_goal.y() - center.y()) / goal_mag * radius
+    );
+
     // uncomment for debugging
-    // visualization::DrawCross(opt_fpl_cutoff, .3, 0xab4865, local_viz_msg_);
-    // visualization::DrawLine(opt_fpl_cutoff, P, 0, local_viz_msg_);
+    visualization::DrawCross(opt_fpl_cutoff, .3, 0xab4865, local_viz_msg_);
+    visualization::DrawLine(robot_rel_goal, opt_fpl_cutoff, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
     for (Vector2f point : point_cloud_) {
@@ -334,17 +346,7 @@ PathOption Navigation::pick_arc() {
       // fpl = f(-c, Mirrored(p)) if c < 0, we flip our curve back into the +ve, 
       // but make sure to give it the new points to work with
       // but make sure to flip it so the math is a bit more stable 
-      if (radius < 0.0) {
-        mirrored = true;
-        radius = -1 * radius; 
-        // make sure to flip the point as well, so that we don't get any repeats
-        eval_point.x() = -1 * point.x();
-      } 
-
-      Eigen::Vector2f opt_fpl_cutoff(
-        center.x() + (robot_rel_goal.x() - center.x()) / goal_mag * radius,
-        center.y() + (robot_rel_goal.y() - center.y()) / goal_mag * radius
-      );
+      if (radius < 0.0) eval_point.x() = -1 * point.x();
 
       // now the math should work as we know it should.
       double mag = magnitude(eval_point.x() - center.x(), eval_point.y() - center.y());
@@ -356,7 +358,7 @@ PathOption Navigation::pick_arc() {
       // just some debuggin code
       // Eigen::Affine2f a_center_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(theta);
       // Vector2f sanity_check_eval_point = a_center_robot * eval_point;
-      // printf("point loc vs. math: %f, %f vs. %f, %f \n", eval_point.x(), eval_point.y(), sanity_check_eval_point.x(), sanity_check_eval_point.y() );
+      // if (debug_print) printf("point loc vs. math: %f, %f vs. %f, %f \n", eval_point.x(), eval_point.y(), sanity_check_eval_point.x(), sanity_check_eval_point.y() );
 
       // this point is an obstruction for this path
       if ((mag >= r_1 && mag <= r_2) && theta > 0) {
@@ -366,12 +368,13 @@ PathOption Navigation::pick_arc() {
         //double optimal_theta = atan2(opt_fpl_cutoff.x(), radius - opt_fpl_cutoff.y());
 
         // check the optimal fpl math.
-
+        double obstructed_fpl = radius * phi; //need to find where this point is in the graph
+        // realllly oughta double check this math
+        double optimal_fpl = (2 * radius) * asin(magnitude(opt_fpl_cutoff.x(), opt_fpl_cutoff.y()) / (2 * radius));
         // TODO: set the point to cutoff the path to whatever point is associated with our chosen fpl.
-        temp_fpl = min(
-          radius * phi,
-          2 * abs(radius) * asin(magnitude(opt_fpl_cutoff.x(), opt_fpl_cutoff.y()) / abs(2 * radius))
-        );
+        temp_fpl = min(obstructed_fpl, optimal_fpl);
+
+
 
         if (temp_fpl < path_i.free_path_length) {
           path_i.free_path_length = temp_fpl; 
@@ -406,7 +409,7 @@ PathOption Navigation::pick_arc() {
   }
 
   // run thru all feasible paths, score them.
-  printf("\nIn Pick Arc, feasible arcs\n");
+  if (debug_print) printf("\nIn Pick Arc, feasible arcs\n");
   
   for(unsigned i = 0; i < path_options.size(); i++) {
     // uncomment for debugging, shouldn't be changing how the arcs are looking.
@@ -423,9 +426,9 @@ PathOption Navigation::pick_arc() {
                                robot_rel_goal.y() - path_options.at(i).closest_point.y());
     path_score = (path_options.at(i).clearance * 1000) + (path_options.at(i).free_path_length)  + (dtgoal * 2);
 
-    printf("Arc %d, curvature = %f, fpl = %f, clearance = %f, dtg = %f \n", i, path_options.at(i).curvature, path_options.at(i).free_path_length, path_options.at(i).clearance, dtgoal);
+    if (debug_print) printf("Arc %d, curvature = %f, fpl = %f, clearance = %f, dtg = %f \n", i, path_options.at(i).curvature, path_options.at(i).free_path_length, path_options.at(i).clearance, dtgoal);
     // if (dtgoal < 0.00001) {
-    //   //printf("/n dtgoal = %f\n", dtgoal);
+    //   //if (debug_print) printf("/n dtgoal = %f\n", dtgoal);
     //   return empty;
     // }
 
@@ -436,10 +439,10 @@ PathOption Navigation::pick_arc() {
     }
   }
 
-  printf("\n");
-  printf("\nAt the end of Pick Arc\n");
-  printf("Previous Score %f\n", prev_score);
-  printf("Current Score %f, Arc %d \n\n", best_path_score, best_path_id);
+  if (debug_print) printf("\n");
+  if (debug_print) printf("\nAt the end of Pick Arc\n");
+  if (debug_print) printf("Previous Score %f\n", prev_score);
+  if (debug_print) printf("Current Score %f, Arc %d \n\n", best_path_score, best_path_id);
   if (prev_path_id == best_path_id) {
     return empty;
   } else {
@@ -462,18 +465,18 @@ void Navigation::position_prediction() {
   y_pred = odom_loc_.y();
   theta_pred = odom_angle_;
 
-  if(debug_print) printf("\n");
-  if(debug_print) printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
-  if(debug_print) printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
-  if(debug_print) printf("d_travelled: %f, d_curr %f, d_max %f\n", d_travelled, d_curr, d_max);
-  if(debug_print) printf("v_i is now %f\n", v_i);
+  if(debug_print) if (debug_print) printf("\n");
+  if(debug_print) if (debug_print) printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
+  if(debug_print) if (debug_print) printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
+  if(debug_print) if (debug_print) printf("d_travelled: %f, d_curr %f, d_max %f\n", d_travelled, d_curr, d_max);
+  if(debug_print) if (debug_print) printf("v_i is now %f\n", v_i);
 
   // 2. predict our future position, building off of actual movement/velocity
   d_curr_pred = d_curr;
   v_i_pred = v_i;
-  if(debug_print) printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
+  if(debug_print) if (debug_print) printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
   if(cycle_num > toc_queue_size + 0x1UL) {
-    if(debug_print) printf("POPPED! cycle %ld\n", cycle_num);
+    if(debug_print) if (debug_print) printf("POPPED! cycle %ld\n", cycle_num);
     toc_queue.Pop();
   }
   for(unsigned i = 0; i < toc_queue.Size(); i++) {
@@ -496,8 +499,8 @@ void Navigation::position_prediction() {
     // update v, d predictions
     v_i_pred = new_v_f;
     d_curr_pred += d_delta;
-    if(debug_print) printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
-    if(debug_print) printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
+    if(debug_print) if (debug_print) printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
+    if(debug_print) if (debug_print) printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
   }
 }
 
@@ -526,18 +529,18 @@ void Navigation::toc1dstraightline() {
   float d_travelled = sqrt(pow((odom_loc_.x() - prev_loc.x()), 2) + pow((odom_loc_.y() - prev_loc.y()), 2));
   d_curr = d_curr + d_travelled;
 
-  printf("\n");
-  printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
-  printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
-  printf("d_travelled: %f, d_curr %f\n", d_travelled, d_curr);
-  printf("v_i is now %f\n", v_i);
+  if (debug_print) printf("\n");
+  if (debug_print) printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
+  if (debug_print) printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
+  if (debug_print) printf("d_travelled: %f, d_curr %f\n", d_travelled, d_curr);
+  if (debug_print) printf("v_i is now %f\n", v_i);
 
   // 2. predict what velocity/distance will be when the command we issue this cycle actuates
   float d_curr_pred = d_curr;
   float v_i_pred = v_i;
-  printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
+  if (debug_print) printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
   if(cycle_num > toc_queue_size + 0x1UL) {
-    //printf("POPPED! cycle %ld\n");
+    //if (debug_print) printf("POPPED! cycle %ld\n");
     toc_queue.Pop();
   }
   for(unsigned i = 0; i < toc_queue.Size(); i++) {
@@ -556,8 +559,8 @@ void Navigation::toc1dstraightline() {
     v_i_pred = new_v_f;
 
     // maybe we use d_delta to predict our future location?
-    printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
-    printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
+    if (debug_print) printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
+    if (debug_print) printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
   }
   v_i = v_i_pred; */
 
@@ -570,7 +573,7 @@ void Navigation::toc1dstraightline() {
   float v_f2 = 0;
   switch(phase) {
     case PHASE_ACCEL:
-      if(debug_print) printf("ACCEL PHASE\n");
+      if(debug_print) if (debug_print) printf("ACCEL PHASE\n");
       v_f = v_i + (a_max * cycle_time);
       float d_accel;
       float d_at_max_vel;
@@ -595,7 +598,7 @@ void Navigation::toc1dstraightline() {
     break;
 
     case PHASE_CRUISE:
-      if(debug_print) printf("CRUISE PHASE\n");
+      if(debug_print) if (debug_print) printf("CRUISE PHASE\n");
       v_f = v_max;
       d_this_cycle = (v_max / cycles_per_second);
       d_total_after_this_cycle = d_curr_pred + d_this_cycle;
@@ -605,7 +608,7 @@ void Navigation::toc1dstraightline() {
     break;
 
     case PHASE_DECEL:
-      if(debug_print) printf("ORG DECEL PHASE\n");
+      if(debug_print) if (debug_print) printf("ORG DECEL PHASE\n");
       v_f = v_i + (decel_max * cycle_time);
       if(v_f < 0) v_f = 0;
       d_this_cycle = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
@@ -621,7 +624,7 @@ void Navigation::toc1dstraightline() {
 
   // 3. check if our prediction changed to decel
   if(phase != new_phase) {
-    if(debug_print) printf("SWAPPED TO DECEL PHASE\n");
+    if(debug_print) if (debug_print) printf("SWAPPED TO DECEL PHASE\n");
     v_f = v_i + (decel_max * cycle_time);
     if(v_f < 0) v_f = 0;
     d_this_cycle = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
@@ -649,13 +652,13 @@ void Navigation::toc1dstraightline() {
       assert(0); // should never occur
     break;
   }
-  printf("drive_msg_.velocity = %f\n", drive_msg_.velocity);
+  if (debug_print) printf("drive_msg_.velocity = %f\n", drive_msg_.velocity);
 
   // 5. save past state
   prev_loc = odom_loc_;
   // TODO: replace 0 with set curvature value
   toc_queue.Push(cycle_num, v_f - v_i, 0);
-  if(debug_print) printf("pushed %f to queue with value %ld. now size %d.\n", v_f - v_i, cycle_num, toc_queue.Size());
+  if(debug_print) if (debug_print) printf("pushed %f to queue with value %ld. now size %d.\n", v_f - v_i, cycle_num, toc_queue.Size());
 
   return;
 }
