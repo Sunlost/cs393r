@@ -58,6 +58,11 @@ const float kEpsilon = 1e-5;
 
 namespace navigation {
 
+PathOption curr_path;
+double curr_score;
+double h = 0.4295 + .1;
+double w = 0.281 / 2 + .1;
+
 string GetMapFileFromName(const string& map) {
   string maps_dir_ = ros::package::getPath("amrl_maps");
   return maps_dir_ + "/" + map + "/" + map + ".vectormap.txt";
@@ -135,24 +140,24 @@ void Navigation::Run() {
   // The latest observed point cloud is accessible via "point_cloud_"
 
 
-  PathOption chosen_path = pick_arc();
-  visualization::DrawPathOption(chosen_path.curvature,
-                                chosen_path.free_path_length,
-                                chosen_path.clearance,
+  curr_path = pick_arc();
+  visualization::DrawPathOption(curr_path.curvature,
+                                curr_path.free_path_length,
+                                curr_path.clearance,
                                 0x3EB489,
                                 true,
                                 local_viz_msg_);
 
-  cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
-  cout << "chosen path's clearance " << chosen_path.clearance << endl;
-  cout << "chosen path's curvature "<< chosen_path.free_path_length << endl;
-  cout << "chosen path's closest " << chosen_path.clearance << endl;
-  cout << "chosen path's obstruction "<< chosen_path.free_path_length << endl;
-  cout << "chosen path's clearance " << chosen_path.clearance << endl;
-  cout << endl;
+  printf("chosen path's fpl %f\n", curr_path.free_path_length);
+  printf("chosen path's clearance %f\n", curr_path.clearance);
+  printf("chosen path's curvature %f\n", curr_path.free_path_length);
+  printf("chosen path's closest %f\n", curr_path.clearance);
+  printf("chosen path's obstruction %f\n", curr_path.free_path_length);
+  printf("chosen path's clearance %f\n", curr_path.clearance);
+  printf("\n");
 
   drive_msg_.velocity = 1;
-  drive_msg_.curvature = chosen_path.curvature;
+  drive_msg_.curvature = curr_path.curvature;
   // pick_arc();
 
   // Eventually, you will have to set the control values to issue drive commands:
@@ -199,8 +204,8 @@ PathOption Navigation::pick_arc() {
 
     PathOption path_i = PathOption();
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
-    path_i.free_path_length = 100; // init to some high value
-    path_i.clearance = 1000;
+    path_i.free_path_length = INFINITY; // init to some high value
+    path_i.clearance = INFINITY;
     path_i.curvature = i;
 
     Eigen::Vector2f center(0, radius); // right = negative value
@@ -267,7 +272,7 @@ PathOption Navigation::pick_arc() {
         // cout << "temp clearance "<< temp_clear << endl;
         
         if (temp_clear < path_i.clearance) {
-          assert(mag <= magnitude(path_i.closest_point.x() - center.x(), path_i.closest_point.y() - center.y()));
+          path_i.closest_point = point;
           path_i.clearance = temp_clear;
         }
         
@@ -275,8 +280,10 @@ PathOption Navigation::pick_arc() {
 
       // alternative if placement a la Macy
     }
-
-    path_options.push_back(path_i);
+    // We want feasible paths only.
+    if (path_i.free_path_length != INFINITY && path_i.free_path_length > 0) {
+      path_options.push_back(path_i);
+    }
     // cout << "radius of " << radius << " and clearance "<< path_i.clearance << endl;
 
   }    
@@ -300,8 +307,9 @@ PathOption Navigation::pick_arc() {
     }
 
   }    
-    return best_path_option;
-  }
+  curr_score = best_arc_score;
+  return best_path_option;
+}
 
 
 }  // namespace navigation
