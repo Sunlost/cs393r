@@ -89,8 +89,12 @@ bool debug_print;
 
 namespace navigation {
 
-PathOption prev_chosen_path;
-double prev_score;
+// PathOption prev_path;
+// double prev_score;
+PathOption curr_path;
+double curr_score;
+double h = 0.4295 + .1;
+double w = 0.281 / 2 + .1;
 
 string GetMapFileFromName(const string& map) {
   string maps_dir_ = ros::package::getPath("amrl_maps");
@@ -126,7 +130,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   d_max = 3.65;
 
   // max velocity: 1.0 m/s
-  v_max = 1.0;
+  v_max = 0.4;
   // max acceleration: 4.0 m/s^2
   a_max = 4.0;
   // max deceleration: 4.0 m/s^2
@@ -199,30 +203,31 @@ void Navigation::Run() {
   // The latest observed point cloud is accessible via "point_cloud_"
 
 
-  PathOption chosen_path = pick_arc();
-  visualization::DrawPathOption(chosen_path.curvature,
-                                chosen_path.free_path_length,
-                                chosen_path.clearance,
+  curr_path = pick_arc();
+  visualization::DrawPathOption(curr_path.curvature,
+                                curr_path.free_path_length,
+                                curr_path.clearance,
                                 0x3EB489,
                                 true,
                                 local_viz_msg_);
 
-  // cout << "chosen path's fpl "<< chosen_path.free_path_length << endl;
-  // cout << "chosen path's clearance " << chosen_path.clearance << endl;
-  // cout << "chosen path's curvature "<< chosen_path.free_path_length << endl;
-  // cout << "chosen path's closest " << chosen_path.clearance << endl;
-  // cout << "chosen path's obstruction "<< chosen_path.free_path_length << endl;
-  // cout << "chosen path's clearance " << chosen_path.clearance << endl;
-  // cout << endl;
+  printf("chosen path's fpl %f\n", curr_path.free_path_length);
+  printf("chosen path's clearance %f\n", curr_path.clearance);
+  printf("chosen path's curvature %f\n", curr_path.free_path_length);
+  printf("chosen path's closest %f\n", curr_path.clearance);
+  printf("chosen path's obstruction %f\n", curr_path.free_path_length);
+  printf("chosen path's clearance %f\n", curr_path.clearance);
+  printf("\n");
 
   // drive_msg_.velocity = 1.0;
   // predict current position, odometry
   position_prediction();
 
-  if(chosen_path.free_path_length != INFINITY) {
-    d_max = chosen_path.free_path_length;
+  if(curr_path.free_path_length != -INFINITY) {
+    // going to make a change, save prev path vars.
+    d_max = curr_path.free_path_length;
     d_curr = 0;
-    drive_msg_.curvature = chosen_path.curvature;
+    drive_msg_.curvature = curr_path.curvature;
     printf("curvature set to %f\n", drive_msg_.curvature);
     d_curr_pred = 0;
     phase = PHASE_ACCEL;
@@ -234,6 +239,10 @@ void Navigation::Run() {
   // drive_msg_.velocity = ...;
 
   cycle_num++;
+
+  // // prepare for next cycle
+  // prev_path = curr_path;
+  // prev_score = curr_score;
 
   // handle 1d toc
   toc1dstraightline();
@@ -259,20 +268,13 @@ PathOption Navigation::pick_arc() {
   float arc_score = 0.0; 
   float best_arc_score = -1;
   // float clearance = 0.0;
-  double safety_margin = 0.1;
-  double temp_fpl;
-  double h = 0.4295 + safety_margin; // add .1 for safety margin
-  double w = (0.281 / 2) + safety_margin;
+  double temp_fpl = 100;
   vector<PathOption> path_options;
   PathOption best_path_option = PathOption();
+  best_path_option.free_path_length = -INFINITY;
 
   // uncomment for debugging - I need to figure out how to set a nav target
-    // uncomment for debugging - I need to figure out how to set a nav target
   Eigen::Vector2f goal(10, 0);
-
-  // Eigen::Rotation2Df goal_straight(-odom_angle);
-
-  // goal = goal_straight * goal;
   visualization::DrawCross(goal, .3, 0x239847, local_viz_msg_);
 
   // curvature options from right to left
@@ -282,19 +284,19 @@ PathOption Navigation::pick_arc() {
     PathOption path_i = PathOption();
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
     path_i.free_path_length = INFINITY; // init to some high value
-    path_i.clearance = 1000;
+    path_i.clearance = 0;
     path_i.curvature = i;
 
     Eigen::Vector2f center(0, radius); // right = negative value
     double goal_mag = magnitude(goal.x() - center.x(), goal.y() - center.y());
-    Eigen::Vector2f closest_point(
+    Eigen::Vector2f optimal_fpl(
           center.x() + (goal.x() - center.x()) / goal_mag * abs(radius),
           center.y() + (goal.y() - center.y()) / goal_mag * abs(radius)
         );
 
     // uncomment for debugging
-    // visualization::DrawCross(closest_point, .3, 0xab4865, local_viz_msg_);
-    // visualization::DrawLine(goal, closest_point, 0, local_viz_msg_);
+    // visualization::DrawCross(optimal_fpl, .3, 0xab4865, local_viz_msg_);
+    // visualization::DrawLine(goal, optimal_fpl, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
     for (Vector2f point : point_cloud_) {
@@ -319,24 +321,27 @@ PathOption Navigation::pick_arc() {
       if ((mag >= r_1 && mag <= r_2) && theta > 0) {
         temp_fpl = min(
           radius * (theta - atan2(h, radius - w)),
-          2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / abs(2 * radius))
+          2 * abs(radius) * asin(magnitude(optimal_fpl.x(), optimal_fpl.y()) / abs(2 * radius))
         );
         if(radius < 0) temp_fpl = min(
           abs(radius * (theta - atan2(h, abs(radius) + w))),
-          abs(2 * abs(radius) * asin(magnitude(closest_point.x(), closest_point.y()) / (2 * radius)))
+          abs(2 * abs(radius) * asin(magnitude(optimal_fpl.x(), optimal_fpl.y()) / (2 * radius)))
         );
 
         // only save the smallest free path length for each curvature
         if (temp_fpl < path_i.free_path_length) {
           path_i.free_path_length = temp_fpl;
-          //path_i.closest_point = closest_point;
           path_i.obstruction = point;
         }
         // where the debug draw arc was
 
       } else if ((mag < r_1 || mag > r_2) && theta > 0) { 
+      
         /* we know the fpl, so we can see if this the closest point
            need to do some radius checks with mag.
+
+           we have to go with the minimum clearance between both r_1 and r_2, 
+           BUT for all points in the point cloud.
            old magnitude will just be the po's         */
 
         /* the current closest point with which to judge clearance is either
@@ -346,44 +351,50 @@ PathOption Navigation::pick_arc() {
         // cout << "temp clearance "<< temp_clear << endl;
         
         if (temp_clear < path_i.clearance) {
+          path_i.closest_point = point;
           path_i.clearance = temp_clear;
         }
       }
+
+      // alternative if placement a la Macy
     }
 
-    // only save paths that are feasible at this point
+    // We want feasible paths only.
     if (path_i.free_path_length != INFINITY && path_i.free_path_length > 0) {
       path_options.push_back(path_i);
     }
     // cout << "radius of " << radius << " and clearance "<< path_i.clearance << endl;
-
   }    
 
   // run thru all feasible paths, score them.
-  for(unsigned int index = 0; index < path_options.size(); index++) {
+  for(PathOption feasible_path : path_options) {
     // uncomment for debugging, shouldn't be changing how the arcs are looking.
-    visualization::DrawPathOption(path_options[index].curvature,
-                                  path_options[index].free_path_length,
-                                  path_options[index].clearance,
+    visualization::DrawPathOption(feasible_path.curvature,
+                                  feasible_path.free_path_length,
+                                  feasible_path.clearance,
                                   0,
                                   false,
                                   local_viz_msg_);
+
     // calculate clearance around obstacle
     double dtgoal = magnitude(goal.x(), goal.y());
-    arc_score = (path_options[index].clearance * 10) + (path_options[index].free_path_length)  + (dtgoal * 25);
+    arc_score = (feasible_path.clearance * 100) + (feasible_path.free_path_length)  + (dtgoal * 25);
     if (arc_score > best_arc_score) {
-      best_path_option = path_options[index];
+      best_path_option = feasible_path;
       best_arc_score = arc_score;
     }
-  }
+  }    
 
-  if (prev_score >= best_arc_score) {
-    PathOption empty = PathOption();
-    empty.free_path_length = INFINITY;
-    return empty;
-  }
-  best_path_option.free_path_length = fabs(best_path_option.free_path_length);
-  return best_path_option;
+  // if (prev_score >= best_arc_score) {
+  //   PathOption empty = PathOption();
+  //   empty.free_path_length = -INFINITY;
+  //   return empty;
+  // } else {
+    // already have removed all -ve fpl'd paths
+    curr_score = best_arc_score;
+    curr_path = best_path_option;
+    return best_path_option;
+  // }
 }
 
 // calculate what phase of ToC we are in, ^"update state
@@ -458,45 +469,45 @@ void Navigation::toc1dstraightline() {
   // total distance after we fully decel to zero
   float d_total_after_decel_to_zero = 0;
 
-  // // 1. get actual car movement/velocity
-  // v_i = hypot(robot_vel_.x(), robot_vel_.y());
-  // float d_travelled = sqrt(pow((odom_loc_.x() - prev_loc.x()), 2) + pow((odom_loc_.y() - prev_loc.y()), 2));
-  // d_curr = d_curr + d_travelled;
+  /* // 1. get actual car movement/velocity
+  v_i = hypot(robot_vel_.x(), robot_vel_.y());
+  float d_travelled = sqrt(pow((odom_loc_.x() - prev_loc.x()), 2) + pow((odom_loc_.y() - prev_loc.y()), 2));
+  d_curr = d_curr + d_travelled;
 
-  // printf("\n");
-  // printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
-  // printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
-  // printf("d_travelled: %f, d_curr %f\n", d_travelled, d_curr);
-  // printf("v_i is now %f\n", v_i);
+  printf("\n");
+  printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
+  printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
+  printf("d_travelled: %f, d_curr %f\n", d_travelled, d_curr);
+  printf("v_i is now %f\n", v_i);
 
-  // // 2. predict what velocity/distance will be when the command we issue this cycle actuates
-  // float d_curr_pred = d_curr;
-  // float v_i_pred = v_i;
-  // printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
-  // if(cycle_num > toc_queue_size + 0x1UL) {
-  //   //printf("POPPED! cycle %ld\n");
-  //   toc_queue.Pop();
-  // }
-  // for(unsigned i = 0; i < toc_queue.Size(); i++) {
-  //   // predict new velocity
-  //   float v_delta = std::get<1>(toc_queue.values_[i]);
-  //   float new_v_f = v_delta + v_i_pred;
-  //   if(new_v_f < 0) new_v_f = 0;
-  //   if(new_v_f > 1) new_v_f = 1;
-  //   // predict new distance
-  //   float d_delta;
-  //   if(v_delta > 0) d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * a_max);
-  //   else if(v_delta == 0) d_delta = new_v_f * cycle_time;
-  //   else d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * decel_max);
-  //   // update predictions
-  //   d_curr_pred += d_delta;
-  //   v_i_pred = new_v_f;
+  // 2. predict what velocity/distance will be when the command we issue this cycle actuates
+  float d_curr_pred = d_curr;
+  float v_i_pred = v_i;
+  printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
+  if(cycle_num > toc_queue_size + 0x1UL) {
+    //printf("POPPED! cycle %ld\n");
+    toc_queue.Pop();
+  }
+  for(unsigned i = 0; i < toc_queue.Size(); i++) {
+    // predict new velocity
+    float v_delta = std::get<1>(toc_queue.values_[i]);
+    float new_v_f = v_delta + v_i_pred;
+    if(new_v_f < 0) new_v_f = 0;
+    if(new_v_f > 1) new_v_f = 1;
+    // predict new distance
+    float d_delta;
+    if(v_delta > 0) d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * a_max);
+    else if(v_delta == 0) d_delta = new_v_f * cycle_time;
+    else d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * decel_max);
+    // update predictions
+    d_curr_pred += d_delta;
+    v_i_pred = new_v_f;
 
-  //   // maybe we use d_delta to predict our future location?
-  //   printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
-  //   printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
-  // }
-  // v_i = v_i_pred;
+    // maybe we use d_delta to predict our future location?
+    printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
+    printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
+  }
+  v_i = v_i_pred; */
 
   // 1. calculate which phase we're in
   if(phase != PHASE_DECEL) phase = (v_i == v_max) ? PHASE_CRUISE : PHASE_ACCEL;
