@@ -94,11 +94,15 @@ namespace navigation {
 
 PathOption prev_path;
 double prev_score;
+unsigned prev_path_id;
+
 PathOption curr_path;
 double curr_score;
-double safety_margin = .2;
-double h = 0.4295 + safety_margin;
-double w = (0.281 / 2) + safety_margin;
+unsigned curr_path_id;
+
+const double safety_margin = .01;
+const double h = 0.4295 + safety_margin;
+const double w = (0.281 / 2) + safety_margin;
 const Eigen::Vector2f map_goal(20, 0);
 //                  curvature clearance   fpl     obstruction                 closest
 const PathOption empty = {  0, -INFINITY, INFINITY, Eigen::Vector2f(0,0), Eigen::Vector2f(0,0) };
@@ -230,8 +234,10 @@ void Navigation::Run() {
     // prepare for next cycle
     prev_path = curr_path;
     prev_score = curr_score;
+    prev_path_id = curr_path_id;
     curr_path = empty;
     curr_score = -1;
+    curr_path_id = 17 ; //def out of bounds for our arcs
   }
 
   cycle_num++;
@@ -258,8 +264,9 @@ PathOption Navigation::pick_arc() {
   // for loop of arcs
   // for each arc, calc score
   // return the best arc
-  float arc_score = 0.0; 
-  float best_arc_score = -1;
+  float path_score = 0.0; 
+  float best_path_score = -1;
+  unsigned best_path_id = 0;
   // float clearance = 0.0;
   double temp_fpl = 100;
   vector<PathOption> path_options;
@@ -305,8 +312,8 @@ PathOption Navigation::pick_arc() {
     double goal_mag = magnitude(robot_rel_goal.x() - center.x(), robot_rel_goal.y() - center.y());
     bool mirrored = false;
     // uncomment for debugging
-    // visualization::DrawCross(fpl_cutoff_point, .3, 0xab4865, local_viz_msg_);
-    // visualization::DrawLine(fpl_cutoff_point, P, 0, local_viz_msg_);
+    // visualization::DrawCross(opt_fpl_cutoff, .3, 0xab4865, local_viz_msg_);
+    // visualization::DrawLine(opt_fpl_cutoff, P, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
     for (Vector2f point : point_cloud_) {
@@ -334,7 +341,7 @@ PathOption Navigation::pick_arc() {
         eval_point.x() = -1 * point.x();
       } 
 
-      Eigen::Vector2f fpl_cutoff_point(
+      Eigen::Vector2f opt_fpl_cutoff(
         center.x() + (robot_rel_goal.x() - center.x()) / goal_mag * radius,
         center.y() + (robot_rel_goal.y() - center.y()) / goal_mag * radius
       );
@@ -356,17 +363,19 @@ PathOption Navigation::pick_arc() {
         // TODO:: make sure to use right point if mirrored
         // path_i.obstruction.x() = (mirrored) ? -1 * eval_point.x() : eval_point.x();
         // path_i.obstruction.y() = eval_point.y();
-        //double optimal_theta = atan2(fpl_cutoff_point.x(), radius - fpl_cutoff_point.y());
+        //double optimal_theta = atan2(opt_fpl_cutoff.x(), radius - opt_fpl_cutoff.y());
 
-        // check the optimal fpl math
+        // check the optimal fpl math.
+
+        // TODO: set the point to cutoff the path to whatever point is associated with our chosen fpl.
         temp_fpl = min(
           radius * phi,
-          2 * abs(radius) * asin(magnitude(fpl_cutoff_point.x(), fpl_cutoff_point.y()) / abs(2 * radius))
+          2 * abs(radius) * asin(magnitude(opt_fpl_cutoff.x(), opt_fpl_cutoff.y()) / abs(2 * radius))
         );
 
         if (temp_fpl < path_i.free_path_length) {
           path_i.free_path_length = temp_fpl; 
-          path_i.closest_point.x() = (mirrored) ? -1 * fpl_cutoff_point.x() : fpl_cutoff_point.x();
+          path_i.closest_point.x() = (mirrored) ? -1 * opt_fpl_cutoff.x() : opt_fpl_cutoff.x();
           path_i.closest_point.y() = eval_point.y();
           path_i.obstruction = point;
         }
@@ -399,7 +408,6 @@ PathOption Navigation::pick_arc() {
   // run thru all feasible paths, score them.
   printf("\nIn Pick Arc, feasible arcs\n");
   
-  unsigned best_i = 0;
   for(unsigned i = 0; i < path_options.size(); i++) {
     // uncomment for debugging, shouldn't be changing how the arcs are looking.
     visualization::DrawPathOption(path_options.at(i).curvature,
@@ -410,36 +418,35 @@ PathOption Navigation::pick_arc() {
                                   local_viz_msg_);
 
     // calculate clearance around obstacle
-    // use robot_rel_goal and fpl_cutoff_point
+    // use robot_rel_goal and opt_fpl_cutoff
     double dtgoal =  magnitude(robot_rel_goal.x() - path_options.at(i).closest_point.x(), 
                                robot_rel_goal.y() - path_options.at(i).closest_point.y());
-    arc_score = (path_options.at(i).clearance * 100) + (path_options.at(i).free_path_length)  + (dtgoal * 2);
+    path_score = (path_options.at(i).clearance * 1000) + (path_options.at(i).free_path_length)  + (dtgoal * 2);
 
-    printf("Arc %d, curvature = %f, fpl = %f, clearance = %f \n", i, path_options.at(i).curvature, path_options.at(i).free_path_length, path_options.at(i).clearance);
-
-    //printf("dtgoal = %f\n", dtgoal);
-    // if (dtgoal <= 0.00001) {
+    printf("Arc %d, curvature = %f, fpl = %f, clearance = %f, dtg = %f \n", i, path_options.at(i).curvature, path_options.at(i).free_path_length, path_options.at(i).clearance, dtgoal);
+    // if (dtgoal < 0.00001) {
     //   //printf("/n dtgoal = %f\n", dtgoal);
     //   return empty;
     // }
 
-    if (arc_score > best_arc_score) {
-      best_i = i;
+    if (path_score > best_path_score) {
+      best_path_id = i;
       best_path_option = path_options.at(i);
-      best_arc_score = arc_score;
+      best_path_score = path_score;
     }
   }
 
   printf("\n");
-  printf("\nIn Pick Arc\n");
+  printf("\nAt the end of Pick Arc\n");
   printf("Previous Score %f\n", prev_score);
-  printf("Current Score %f, Arc %d \n\n", best_arc_score, best_i);
-  if (prev_score >= best_arc_score) {
+  printf("Current Score %f, Arc %d \n\n", best_path_score, best_path_id);
+  if (prev_path_id == best_path_id) {
     return empty;
   } else {
-    // already have removed all -ve fpl'd paths
-    curr_score = best_arc_score;
+    //already have removed all -ve fpl'd paths
+    curr_score = best_path_score;
     curr_path = best_path_option;
+    curr_path_id = best_path_id;
     return best_path_option;
   }
 }
