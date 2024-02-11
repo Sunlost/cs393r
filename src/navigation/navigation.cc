@@ -95,6 +95,8 @@ PathOption curr_path;
 double curr_score;
 double h = 0.4295 + .1;
 double w = 0.281 / 2 + .1;
+//                  curvature clearance   fpl     obstruction                 closest
+const PathOption empty = {  0, -INFINITY, INFINITY, Eigen::Vector2f(0,0), Eigen::Vector2f(0,0) };
 
 string GetMapFileFromName(const string& map) {
   string maps_dir_ = ros::package::getPath("amrl_maps");
@@ -204,15 +206,13 @@ void Navigation::Run() {
                                 true,
                                 local_viz_msg_);
 
-  printf("chosen path's fpl %f\n", curr_path.free_path_length);
+  printf("\nchosen path's fpl %f\n", curr_path.free_path_length);
   printf("chosen path's clearance %f\n", curr_path.clearance);
-  printf("chosen path's curvature %f\n", curr_path.free_path_length);
-  printf("chosen path's closest %f\n", curr_path.clearance);
-  printf("chosen path's obstruction %f\n", curr_path.free_path_length);
-  printf("chosen path's clearance %f\n", curr_path.clearance);
+  printf("chosen path's curvature %f\n", curr_path.curvature);
+  printf("chosen path's closest %f, %f\n", curr_path.closest_point.x(), curr_path.closest_point.y());
+  printf("chosen path's obstruction %f, %f\n", curr_path.obstruction.x(), curr_path.obstruction.y());
   printf("Previous Score %f\n", prev_score);
-  printf("Current Score %f\n", curr_score);
-  printf("\n");
+  printf("Current Score %f\n\n", curr_score);
 
   // drive_msg_.velocity = 1.0;
   // predict current position, odometry
@@ -229,6 +229,8 @@ void Navigation::Run() {
     // prepare for next cycle
     prev_path = curr_path;
     prev_score = curr_score;
+    // curr_path = empty;
+    // curr_score = -1;
   }
 
   // Eventually, you will have to set the control values to issue drive commands:
@@ -256,6 +258,9 @@ float magnitude(double x, double y) {
 }
 
 PathOption Navigation::pick_arc() {
+  // prev_path = curr_path;
+  // prev_score = curr_score;
+
   // for loop of arcs
   // for each arc, calc score
   // return the best arc
@@ -265,7 +270,7 @@ PathOption Navigation::pick_arc() {
   double temp_fpl = 100;
   vector<PathOption> path_options;
   PathOption best_path_option = PathOption();
-  best_path_option.free_path_length = -INFINITY;
+  best_path_option.free_path_length = INFINITY;
 
   // uncomment for debugging - I need to figure out how to set a nav target
   Eigen::Vector2f goal(10, 0);
@@ -278,7 +283,7 @@ PathOption Navigation::pick_arc() {
     PathOption path_i = PathOption();
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
     path_i.free_path_length = INFINITY; // init to some high value
-    path_i.clearance = 0;
+    path_i.clearance = INFINITY;
     path_i.curvature = i;
 
     Eigen::Vector2f center(0, radius); // right = negative value
@@ -328,8 +333,7 @@ PathOption Navigation::pick_arc() {
           path_i.obstruction = point;
         }
         // where the debug draw arc was
-
-      } else if ((mag < r_1 || mag > r_2) && theta > 0) { 
+      } else if ((fabs(mag) < fabs(r_1) || fabs(mag) > fabs(r_2)) && theta > 0) { 
       
         /* we know the fpl, so we can see if this the closest point
            need to do some radius checks with mag.
@@ -340,7 +344,9 @@ PathOption Navigation::pick_arc() {
 
         /* the current closest point with which to judge clearance is either
            less than r1 or greater than r2 */
-        double temp_clear = (mag < r_1) ? fabs(mag) - fabs(r_1) : fabs(mag) - fabs(r_2);
+        
+        // TODO Fix negative clearances
+        double temp_clear = (fabs(mag) < fabs(r_1)) ? fabs(r_1) - fabs(mag)  : fabs(mag) - fabs(r_2);
 
         // cout << "temp clearance "<< temp_clear << endl;
         
@@ -372,7 +378,7 @@ PathOption Navigation::pick_arc() {
 
     // calculate clearance around obstacle
     double dtgoal = magnitude(goal.x(), goal.y());
-    arc_score = (feasible_path.clearance * 100) + (feasible_path.free_path_length)  + (dtgoal * 2550);
+    arc_score = (feasible_path.clearance * 100) + (feasible_path.free_path_length)  + (dtgoal * 25);
     if (arc_score > best_arc_score) {
       best_path_option = feasible_path;
       best_arc_score = arc_score;
@@ -380,8 +386,6 @@ PathOption Navigation::pick_arc() {
   }    
 
   if (prev_score >= best_arc_score) {
-    PathOption empty = PathOption();
-    empty.free_path_length = -INFINITY;
     return empty;
   } else {
     // already have removed all -ve fpl'd paths
