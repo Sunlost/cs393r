@@ -41,6 +41,7 @@
 #include <eigen3/Eigen/src/Geometry/Rotation2D.h>
 #include <eigen3/Eigen/src/Geometry/Transform.h>
 #include <eigen3/Eigen/src/Geometry/Translation.h>
+#include <math.h>
 #include <sys/types.h>
 #include <tuple>
 #include "simple_queue.h"
@@ -268,7 +269,8 @@ PathOption Navigation::pick_arc() {
   float best_path_score = -1;
   unsigned best_path_id = 0;
   // float clearance = 0.0;
-  double temp_fpl = 100;
+  double temp_fpl = INFINITY;
+  Vector2f temp_endpt(INFINITY, INFINITY);
   vector<PathOption> path_options;
   PathOption best_path_option = PathOption();
   best_path_option.free_path_length = INFINITY;
@@ -303,37 +305,37 @@ PathOption Navigation::pick_arc() {
   // max curvature is 1
   for(double i = -1; i <= 1; i += 0.1) {
     bool curved = abs(i) != 0.0; //theta math must be avoided to ensure accuracy of closest point to goal
-    printf("%d\n", curved);
     bool mirrored = false;
 
     PathOption path_i = PathOption();
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
+
+    if (radius < 0.0) {
+      mirrored = true;
+      radius = -1 * radius; 
+    } 
 
     Eigen::Vector2f center(0, radius); // right = negative value
     double goal_mag = magnitude(robot_rel_goal.x() - center.x(), robot_rel_goal.y() - center.y());
 
     // fpl = f(c, p) if c > 0
     // fpl = f(-c, Mirrored(p)) if c < 0, we flip our curve back into the +ve, and flip points in cloud y
-    if (radius < 0.0) {
-      mirrored = true;
-      radius = -1 * radius; 
-    } 
 
     // Straight path init vals
-    Eigen::Vector2f opt_fpl_cutoff(robot_rel_goal.x(), 0);
+    Eigen::Vector2f optimal_endpt(robot_rel_goal.x(), 0);
     path_i.free_path_length = robot_rel_goal.x();
     if (curved) {
       // path is curved.
-      opt_fpl_cutoff.x() = center.x() + (robot_rel_goal.x() - center.x()) / goal_mag * radius;
-      opt_fpl_cutoff.y() = center.y() + (robot_rel_goal.y() - center.y()) / goal_mag * radius;
-      path_i.free_path_length = (2 * radius) * asin(magnitude(opt_fpl_cutoff.x(), opt_fpl_cutoff.y()) / (2 * radius)); // init to some high value
+      optimal_endpt.x() = center.x() + (robot_rel_goal.x() - center.x()) / goal_mag * radius;
+      optimal_endpt.y() = center.y() + (robot_rel_goal.y() - center.y()) / goal_mag * radius;
+      path_i.free_path_length = (2 * radius) * asin(magnitude(optimal_endpt.x(), optimal_endpt.y()) / (2 * radius)); // init to some high value
     } 
     path_i.clearance = INFINITY;
     path_i.curvature = i; 
 
     // uncomment for debugging
-    // visualization::DrawCross(opt_fpl_cutoff, .3, 0xab4865, local_viz_msg_);
-    // visualization::DrawLine(robot_rel_goal, opt_fpl_cutoff, 0, local_viz_msg_);
+    // visualization::DrawCross(optimal_endpt, .3, 0xab4865, local_viz_msg_);
+    // visualization::DrawLine(robot_rel_goal, optimal_endpt, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
     for (Vector2f point : point_cloud_) {
@@ -353,30 +355,44 @@ PathOption Navigation::pick_arc() {
         double theta = atan2(eval_point.x(), radius - eval_point.y());
         double phi = (theta - omega);
 
-        // We know r_1, we have radius, we have the angle between them, we just don't know the x coord. of the end of the fpl.
-        Eigen::Vector2f end_of_obstructed_path(radius * cos(theta), r_1);
-        if (mirrored) end_of_obstructed_path.y() = -1 * end_of_obstructed_path.y();
-        
+        // rotate r from (0,r) by phi radians to find the endpoint
+        Eigen::Affine2f rotate_phi = Eigen::Translation2f(0, radius) * Eigen::Rotation2Df(phi);
+        Eigen::Vector2f circle_center(0, -radius);
+        Eigen::Vector2f obstructed_endpt = rotate_phi * circle_center; // this wrong, need to use affines.
+        // if (mirrored) obstructed_endpt.y() = -1 * obstructed_endpt.y();
+        // if (mirrored) optimal_endpt.y() = -1 * optimal_endpt.y();
         // this point is an obstruction for this path
         if ((mag >= r_1 && mag <= r_2) && theta > 0) {
           // check the optimal fpl math.
           double obstructed_fpl = radius * phi; // need to find where this point is in the graph
-          double optimal_fpl = (2 * radius) * asin(magnitude(opt_fpl_cutoff.x(), opt_fpl_cutoff.y()) / (2 * radius));
-          temp_fpl = min(obstructed_fpl, optimal_fpl);
-          visualization::DrawCross(end_of_obstructed_path, .3, 0xFF0000, local_viz_msg_);
-          visualization::DrawCross(opt_fpl_cutoff, .3, 0x0000FF, local_viz_msg_);
-          Eigen::Vector2f end_of_path = (temp_fpl == optimal_fpl) ? opt_fpl_cutoff : end_of_obstructed_path;
+          Eigen::Affine2f translate_center = Eigen::Translation2f(0, -radius) * Eigen::Rotation2Df(0);
+          Eigen::Vector2f center_optimal_endpt = translate_center * optimal_endpt;
+          double optimal_central_angle = abs(atan(center_optimal_endpt.x() / center_optimal_endpt.y()));
+          double optimal_fpl = optimal_central_angle * radius;
+          // Values are identical as far as I can tell with the below and above.
+          // double optimal_fpl = (2 * radius) * asin(magnitude(optimal_endpt.x(), optimal_endpt.y()) / (2 * radius));
+
+          if (obstructed_fpl < optimal_fpl) {
+            temp_fpl = obstructed_fpl;
+            temp_endpt = obstructed_endpt;
+          } else {
+            temp_fpl = optimal_fpl;
+            temp_endpt = optimal_endpt;
+          }
+
+          // if (mirrored) visualization::DrawCross(Eigen::Vector2f (temp_endpt.x(), -1 * temp_endpt.y()), .1, 0xFF0000, local_viz_msg_);
+          // else visualization::DrawCross(Eigen::Vector2f (temp_endpt.x(), temp_endpt.y()), .1, 0xFF0000, local_viz_msg_);
+
           if (temp_fpl < path_i.free_path_length) {
-            path_i.free_path_length = temp_fpl; 
-            // have to flip the stored point back into its place
-            path_i.closest_point.y() = (mirrored) ? -1 * end_of_path.y() : end_of_path.y();
-            path_i.closest_point.x() = end_of_path.x();
+            path_i.free_path_length = min(path_i.free_path_length, temp_fpl); // need to do same 3 way min for end of path
+            temp_endpt.y() = (mirrored) ? -1 * temp_endpt.y() : temp_endpt.y();
+            path_i.closest_point = temp_endpt;
             path_i.obstruction = point;
           }
         }
         else if((mag < r_1 || mag > r_2) && theta > 0) { 
           double temp_clear = (mag < r_1) ? abs(r_1 - mag)  : abs(mag - r_2);
-          
+
           if (temp_clear < path_i.clearance)
             path_i.clearance = temp_clear;
           
@@ -394,12 +410,12 @@ PathOption Navigation::pick_arc() {
             double optimal_fpl = robot_rel_goal.x();
             if (debug_print) printf("\nstraight obstructed vs. optimal: %f vs. %f\n", obstructed_fpl, optimal_fpl);
             double temp_fpl = min(obstructed_fpl, optimal_fpl);
-            Eigen::Vector2f end_of_path(0, temp_fpl);
+            Eigen::Vector2f temp_endpt(0, temp_fpl);
             if (temp_fpl < path_i.free_path_length) {
               path_i.free_path_length = temp_fpl; 
               // have to flip the stored point back into its place
-              path_i.closest_point.y() = (mirrored) ? -1 * end_of_path.y() : end_of_path.y();
-              path_i.closest_point.x() = end_of_path.x();
+              path_i.closest_point.y() = (mirrored) ? -1 * temp_endpt.y() : temp_endpt.y();
+              path_i.closest_point.x() = temp_endpt.x();
               if (debug_print) printf("\nend of path straight: %f, %f\n", obstructed_fpl, optimal_fpl);
               path_i.obstruction = point;
             } else if ((eval_point.y() < r_1 || eval_point.y() > r_2) && eval_point.x() > h) { 
@@ -412,12 +428,12 @@ PathOption Navigation::pick_arc() {
         }
       } 
       // uncomment for debugging, shouldn't be changing how the arcs are looking, and yet it is...
-      visualization::DrawPathOption(path_i.curvature,
-                                    path_i.free_path_length,
-                                    path_i.clearance,
-                                    0x00FF00,
-                                    false,
-                                    local_viz_msg_);
+      // visualization::DrawPathOption(path_i.curvature,
+      //                               path_i.free_path_length,
+      //                               path_i.clearance,
+      //                               0xa3FF00,
+      //                               false,
+      //                               local_viz_msg_);
     }
 
     path_options.push_back(path_i);
@@ -427,21 +443,21 @@ PathOption Navigation::pick_arc() {
   if (debug_print) printf("\nIn Pick Arc, feasible arcs\n");
   
   for(unsigned i = 0; i < path_options.size(); i++) {
-    // uncomment for debugging, shouldn't be changing how the arcs are looking.
-    // visualization::DrawPathOption(path_options.at(i).curvature,
-    //                               path_options.at(i).free_path_length,
-    //                               path_options.at(i).clearance,
-    //                               0x00FF00,
-    //                               false,
-    //                               local_viz_msg_);
+    // //uncomment for debugging, shouldn't be changing how the arcs are looking.
+    visualization::DrawPathOption(path_options.at(i).curvature,
+                                  path_options.at(i).free_path_length,
+                                  path_options.at(i).clearance,
+                                  0,
+                                  false,
+                                  local_viz_msg_);
 
-    // visualization::DrawCross(path_options.at(i).closest_point, .3, 0xab0065, local_viz_msg_);
+    visualization::DrawCross(path_options.at(i).closest_point, .3, 0xab0065, local_viz_msg_);
     // visualization::DrawCross(path_options.at(i).obstruction, .3, 0xab0065, local_viz_msg_);
     // calculate clearance around obstacle
-    // use robot_rel_goal and opt_fpl_cutoff
+    // use robot_rel_goal and optimal_endpt
     double dtgoal = magnitude(robot_rel_goal.x() - path_options.at(i).closest_point.x(), 
                               robot_rel_goal.y() - path_options.at(i).closest_point.y());
-    path_score = (path_options.at(i).clearance * 150) + (path_options.at(i).free_path_length)  + (dtgoal * 2);
+    path_score = (path_options.at(i).clearance * 1500) + (path_options.at(i).free_path_length)  + (dtgoal * -2);
 
     if (debug_print) {
        printf("Arc %d, curvature = %f, fpl = %f, clearance = %f, dtg = %f, closest point = %f, %f\n", 
