@@ -105,6 +105,7 @@ const double safety_margin = .1;
 const double h = 0.4295 + safety_margin;
 const double w = (0.281 / 2) + safety_margin;
 const Eigen::Vector2f map_goal(20, 0);
+const double clearance_cap = .005;
 //                  curvature clearance   fpl     obstruction                 closest
 const PathOption empty = {  0, -INFINITY, INFINITY, Eigen::Vector2f(0,0), Eigen::Vector2f(0,0) };
 
@@ -271,6 +272,7 @@ PathOption Navigation::pick_arc() {
   // float clearance = 0.0;
   double temp_fpl = INFINITY;
   Vector2f temp_endpt(INFINITY, INFINITY);
+  vector<double> curves;
   vector<PathOption> path_options;
   PathOption best_path_option = PathOption();
   best_path_option.free_path_length = INFINITY;
@@ -303,6 +305,10 @@ PathOption Navigation::pick_arc() {
   // curvature options from right to left
   // -ve y is the right direction, +ve y is the left direction
   // max curvature is 1
+
+  // for(double i = -1; i <= 1; i += 0.1) {
+  //   curves.push_back(i);
+  // }
 
   for(double i = -1; i <= 1; i += 0.1) {
     bool curved = abs(i) != 0.0; //theta math must be avoided to ensure accuracy of closest point to goal
@@ -393,41 +399,12 @@ PathOption Navigation::pick_arc() {
         }
         else if((mag < r_1 || mag > r_2) && theta > 0) { 
           double temp_clear = (mag < r_1) ? abs(r_1 - mag)  : abs(mag - r_2);
-
+          if (temp_clear > clearance_cap) 
+            temp_clear = clearance_cap;
           if (temp_clear < path_i.clearance)
             path_i.clearance = temp_clear;
-          
         }
-      } else {
-        printf("\nBAZINGA 1\n");
-        // we need fpl & clearance, radius and point cloud still mirrored
-        double r_1 = w;
-        double r_2 = -w;
-        for (Vector2f point : point_cloud_) {
-          if ((eval_point.y() >= r_1 && eval_point.y() <= r_2) && eval_point.x() >= h) {
-            printf("\nBAZINGA in swept volume\n");
-            // check the optimal fpl math.
-            double obstructed_fpl = eval_point.x() - h;
-            double optimal_fpl = robot_rel_goal.x();
-            if (debug_print) printf("\nstraight obstructed vs. optimal: %f vs. %f\n", obstructed_fpl, optimal_fpl);
-            double temp_fpl = min(obstructed_fpl, optimal_fpl);
-            Eigen::Vector2f temp_endpt(0, temp_fpl);
-            if (temp_fpl < path_i.free_path_length) {
-              path_i.free_path_length = temp_fpl; 
-              // have to flip the stored point back into its place
-              path_i.closest_point.y() = (mirrored) ? -1 * temp_endpt.y() : temp_endpt.y();
-              path_i.closest_point.x() = temp_endpt.x();
-              if (debug_print) printf("\nend of path straight: %f, %f\n", obstructed_fpl, optimal_fpl);
-              path_i.obstruction = point;
-            } else if ((eval_point.y() < r_1 || eval_point.y() > r_2) && eval_point.x() > h) { 
-              printf("\nBAZINGA outside swept volume\n");
-              double temp_clear = (eval_point.y() < r_1) ? abs(r_1 - eval_point.y())  : abs(eval_point.y() - r_2);
-              if (temp_clear < path_i.clearance)
-                path_i.clearance = temp_clear;
-            }
-          }
-        }
-      } 
+      }
     }
 
     path_options.push_back(path_i);
