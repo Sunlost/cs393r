@@ -101,7 +101,7 @@ PathOption curr_path;
 double curr_score;
 unsigned curr_path_id;
 
-const double safety_margin = .01;
+const double safety_margin = .1;
 const double h = 0.4295 + safety_margin;
 const double w = (0.281 / 2) + safety_margin;
 const Eigen::Vector2f map_goal(20, 0);
@@ -303,6 +303,7 @@ PathOption Navigation::pick_arc() {
   // curvature options from right to left
   // -ve y is the right direction, +ve y is the left direction
   // max curvature is 1
+
   for(double i = -1; i <= 1; i += 0.1) {
     bool curved = abs(i) != 0.0; //theta math must be avoided to ensure accuracy of closest point to goal
     bool mirrored = false;
@@ -452,7 +453,7 @@ PathOption Navigation::pick_arc() {
                               robot_rel_goal.y() - path_options.at(i).closest_point.y());
 
     // We could really make this super effective if we could get te 
-    path_score = (path_options.at(i).clearance * 1500) + (path_options.at(i).free_path_length)  + (dtgoal * 10);
+    path_score = (path_options.at(i).clearance * 15) + (path_options.at(i).free_path_length)  + (dtgoal * .01);
 
     if (debug_print) {
        printf("Arc %d, curvature = %f, fpl = %f, clearance = %f, dtg = %f, closest point = %f, %f\n", 
