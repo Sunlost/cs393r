@@ -519,7 +519,7 @@ void Navigation::position_prediction() {
     // predict new velocity
     float new_v_f = v_delta + v_i_pred;
     if(new_v_f < 0) new_v_f = 0;
-    if(new_v_f > 1) new_v_f = 1;
+    if(new_v_f > v_max) new_v_f = v_max;
     // predict new distance
     float d_delta;
     if(v_delta > 0) d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * a_max);
@@ -556,46 +556,6 @@ void Navigation::toc1dstraightline() {
   float d_total_after_this_cycle = 0;
   // total distance after we fully decel to zero
   float d_total_after_decel_to_zero = 0;
-
-  /* // 1. get actual car movement/velocity
-  v_i = hypot(robot_vel_.x(), robot_vel_.y());
-  float d_travelled = sqrt(pow((odom_loc_.x() - prev_loc.x()), 2) + pow((odom_loc_.y() - prev_loc.y()), 2));
-  d_curr = d_curr + d_travelled;
-
-  if (debug_print) printf("\n");
-  if (debug_print) printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
-  if (debug_print) printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
-  if (debug_print) printf("d_travelled: %f, d_curr %f\n", d_travelled, d_curr);
-  if (debug_print) printf("v_i is now %f\n", v_i);
-
-  // 2. predict what velocity/distance will be when the command we issue this cycle actuates
-  float d_curr_pred = d_curr;
-  float v_i_pred = v_i;
-  if (debug_print) printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
-  if(cycle_num > toc_queue_size + 0x1UL) {
-    //if (debug_print) printf("POPPED! cycle %ld\n");
-    toc_queue.Pop();
-  }
-  for(unsigned i = 0; i < toc_queue.Size(); i++) {
-    // predict new velocity
-    float v_delta = std::get<1>(toc_queue.values_[i]);
-    float new_v_f = v_delta + v_i_pred;
-    if(new_v_f < 0) new_v_f = 0;
-    if(new_v_f > 1) new_v_f = 1;
-    // predict new distance
-    float d_delta;
-    if(v_delta > 0) d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * a_max);
-    else if(v_delta == 0) d_delta = new_v_f * cycle_time;
-    else d_delta = (pow(new_v_f, 2) - pow(v_i_pred, 2)) / (2 * decel_max);
-    // update predictions
-    d_curr_pred += d_delta;
-    v_i_pred = new_v_f;
-
-    // maybe we use d_delta to predict our future location?
-    if (debug_print) printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
-    if (debug_print) printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
-  }
-  v_i = v_i_pred; */
 
   // 1. calculate which phase we're in
   if(phase != PHASE_DECEL) phase = (v_i == v_max) ? PHASE_CRUISE : PHASE_ACCEL;
