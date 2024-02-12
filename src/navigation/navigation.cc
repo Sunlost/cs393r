@@ -288,20 +288,18 @@ PathOption Navigation::pick_arc() {
   // if (debug_print) printf("robot_loc %f %f\n", robot_loc_.x(), robot_loc_.y());
   // if (debug_print) printf("robot_angle %f\n\n", robot_angle_ );
 
-  double map_car_angle = odom_angle_ - odom_start_angle_;
-  Eigen::Vector2f map_car_loc_diff(odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
-  double x_distance
-  // +ve x is forward for robot, +ve y is left
-  // +ve angle rot. is to robot's left.
+  // double map_car_angle = odom_angle_ - odom_start_angle_;
+  // Eigen::Vector2f map_car_loc_diff(odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
+  // double x_distance
+  // // +ve x is forward for robot, +ve y is left
+  // // +ve angle rot. is to robot's left.
   
-  // Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle);
-  Eigen::Affine2f a_map_robot = Eigen::Translation2f(+ -abs(map_car_loc_diff.x()) , -abs(map_car_loc_diff.y())) * Eigen::Rotation2Df(-map_car_angle);
+  // // Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle);
+  // Eigen::Affine2f a_map_robot = Eigen::Translation2f(+ -abs(map_car_loc_diff.x()) , -abs(map_car_loc_diff.y())) * Eigen::Rotation2Df(-map_car_angle);
 
   // //We want to zero out the point
-  Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
-
-
-  //Eigen::Vector2f robot_rel_goal = map_goal;
+  // Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
+  Eigen::Vector2f robot_rel_goal = map_goal;
 
   // visualization::DrawCross(robot_rel_goal, .3, 0x239847, local_viz_msg_);
 
