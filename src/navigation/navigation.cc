@@ -160,7 +160,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   prev_loc = Vector2f(0, 0);
   toc_queue_size = 1; // assume 0.15s latency @ 0.05s/cycle = 3 cycles
 
-  debug_print = true;
+  debug_print = false;
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -288,17 +288,20 @@ PathOption Navigation::pick_arc() {
   // if (debug_print) printf("robot_loc %f %f\n", robot_loc_.x(), robot_loc_.y());
   // if (debug_print) printf("robot_angle %f\n\n", robot_angle_ );
 
-  // double map_car_angle_diff = odom_angle_ - odom_start_angle_;
-  // Eigen::Vector2f map_car_loc_diff(odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
+  double map_car_angle = odom_angle_ - odom_start_angle_;
+  Eigen::Vector2f map_car_loc_diff(odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
+  double x_distance
   // +ve x is forward for robot, +ve y is left
   // +ve angle rot. is to robot's left.
   
-  // Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle_diff);
-  // Eigen::Affine2f a_map_robot = Eigen::Translation2f(-abs(map_car_loc_diff.x()) , -abs(map_car_loc_diff.y())) * Eigen::Rotation2Df(-map_car_angle_diff);
+  // Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle);
+  Eigen::Affine2f a_map_robot = Eigen::Translation2f(+ -abs(map_car_loc_diff.x()) , -abs(map_car_loc_diff.y())) * Eigen::Rotation2Df(-map_car_angle);
 
-  // We want to zero out the point
-  //Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
-  Eigen::Vector2f robot_rel_goal = map_goal;
+  // //We want to zero out the point
+  Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
+
+
+  //Eigen::Vector2f robot_rel_goal = map_goal;
 
   // visualization::DrawCross(robot_rel_goal, .3, 0x239847, local_viz_msg_);
 
@@ -475,18 +478,18 @@ void Navigation::position_prediction() {
   y_pred = odom_loc_.y();
   theta_pred = odom_angle_;
 
-  if(debug_print) if (debug_print) printf("\n");
-  if(debug_print) if (debug_print) printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
-  if(debug_print) if (debug_print) printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
-  if(debug_print) if (debug_print) printf("d_travelled: %f, d_curr %f, d_max %f\n", d_travelled, d_curr, d_max);
-  if(debug_print) if (debug_print) printf("v_i is now %f\n", v_i);
+  if(debug_print) printf("\n");
+  if(debug_print) printf("prev_loc(x,y): %f, %f\n", prev_loc.x(), prev_loc.y());
+  if(debug_print) printf("odom_loc_(x,y): %f, %f\n", odom_loc_.x(), odom_loc_.y());
+  if(debug_print) printf("d_travelled: %f, d_curr %f, d_max %f\n", d_travelled, d_curr, d_max);
+  if(debug_print) printf("v_i is now %f\n", v_i);
 
   // 2. predict our future position, building off of actual movement/velocity
   d_curr_pred = d_curr;
   v_i_pred = v_i;
-  if(debug_print) if (debug_print) printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
+  if(debug_print) printf("cycle_num: %ld, toc_queue_size + 0x1UL: %ld, actual queue size: %d\n", cycle_num, toc_queue_size + 0x1UL, toc_queue.Size());
   if(cycle_num > toc_queue_size + 0x1UL) {
-    if(debug_print) if (debug_print) printf("POPPED! cycle %ld\n", cycle_num);
+    if(debug_print) printf("POPPED! cycle %ld\n", cycle_num);
     toc_queue.Pop();
   }
   for(unsigned i = 0; i < toc_queue.Size(); i++) {
@@ -509,8 +512,8 @@ void Navigation::position_prediction() {
     // update v, d predictions
     v_i_pred = new_v_f;
     d_curr_pred += d_delta;
-    if(debug_print) if (debug_print) printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
-    if(debug_print) if (debug_print) printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
+    if(debug_print) printf("pred v_delta = %f, new_v_f now = %f\n", v_delta, new_v_f);
+    if(debug_print) printf("pred d_delta = %f, d_curr_pred now = %f\n", d_delta, d_curr_pred);
   }
 }
 
@@ -543,7 +546,7 @@ void Navigation::toc1dstraightline() {
   float v_f2 = 0;
   switch(phase) {
     case PHASE_ACCEL:
-      if(debug_print) if (debug_print) printf("ACCEL PHASE\n");
+      if(debug_print) printf("ACCEL PHASE\n");
       v_f = v_i + (a_max * cycle_time);
       float d_accel;
       float d_at_max_vel;
@@ -568,7 +571,7 @@ void Navigation::toc1dstraightline() {
     break;
 
     case PHASE_CRUISE:
-      if(debug_print) if (debug_print) printf("CRUISE PHASE\n");
+      if(debug_print) printf("CRUISE PHASE\n");
       v_f = v_max;
       d_this_cycle = (v_max / cycles_per_second);
       d_total_after_this_cycle = d_curr_pred + d_this_cycle;
@@ -578,7 +581,7 @@ void Navigation::toc1dstraightline() {
     break;
 
     case PHASE_DECEL:
-      if(debug_print) if (debug_print) printf("ORG DECEL PHASE\n");
+      if(debug_print) printf("ORG DECEL PHASE\n");
       v_f = v_i + (decel_max * cycle_time);
       if(v_f < 0) v_f = 0;
       d_this_cycle = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
@@ -594,7 +597,7 @@ void Navigation::toc1dstraightline() {
 
   // 3. check if our prediction changed to decel
   if(phase != new_phase) {
-    if(debug_print) if (debug_print) printf("SWAPPED TO DECEL PHASE\n");
+    if(debug_print) printf("SWAPPED TO DECEL PHASE\n");
     v_f = v_i + (decel_max * cycle_time);
     if(v_f < 0) v_f = 0;
     d_this_cycle = (pow(v_f, 2) - pow(v_i, 2)) / (2 * decel_max);
@@ -628,7 +631,7 @@ void Navigation::toc1dstraightline() {
   prev_loc = odom_loc_;
   // TODO: replace 0 with set curvature value
   toc_queue.Push(cycle_num, v_f - v_i, 0);
-  if(debug_print) if (debug_print) printf("pushed %f to queue with value %ld. now size %d.\n", v_f - v_i, cycle_num, toc_queue.Size());
+  if(debug_print) printf("pushed %f to queue with value %ld. now size %d.\n", v_f - v_i, cycle_num, toc_queue.Size());
 
   return;
 }
