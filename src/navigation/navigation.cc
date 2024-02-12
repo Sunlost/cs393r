@@ -143,7 +143,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   d_max = 3.65;
 
   // max velocity: 1.0 m/s
-  v_max = 0.5;
+  v_max = .5;
   // max acceleration: 4.0 m/s^2
   a_max = 4.0;
   // max deceleration: 4.0 m/s^2
@@ -243,6 +243,7 @@ void Navigation::Run() {
   }
 
   cycle_num++;
+  printf("\nCycle Num: %d\n", cycle_num);
 
   // handle 1d toc
   toc1dstraightline();
