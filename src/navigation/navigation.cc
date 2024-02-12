@@ -292,7 +292,7 @@ PathOption Navigation::pick_arc() {
   // +ve angle rot. is to robot's left.
   
   // Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle_diff);
-  //Eigen::Affine2f a_map_robot = Eigen::Translation2f(-abs(map_car_loc_diff.x()) , -abs(map_car_loc_diff.y())) * Eigen::Rotation2Df(-map_car_angle_diff);
+  // Eigen::Affine2f a_map_robot = Eigen::Translation2f(-abs(map_car_loc_diff.x()) , -abs(map_car_loc_diff.y())) * Eigen::Rotation2Df(-map_car_angle_diff);
 
   // We want to zero out the point
   //Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
@@ -427,13 +427,6 @@ PathOption Navigation::pick_arc() {
           }
         }
       } 
-      // uncomment for debugging, shouldn't be changing how the arcs are looking, and yet it is...
-      // visualization::DrawPathOption(path_i.curvature,
-      //                               path_i.free_path_length,
-      //                               path_i.clearance,
-      //                               0xa3FF00,
-      //                               false,
-      //                               local_viz_msg_);
     }
 
     path_options.push_back(path_i);
