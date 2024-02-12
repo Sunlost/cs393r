@@ -141,7 +141,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   d_max = 3.65;
 
   // max velocity: 1.0 m/s
-  v_max = 1.0;
+  v_max = 0.4;
   // max acceleration: 4.0 m/s^2
   a_max = 4.0;
   // max deceleration: 4.0 m/s^2
@@ -296,7 +296,7 @@ PathOption Navigation::pick_arc() {
   Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
 
   // uncomment for debugging - I need to figure out how to set a nav target
-  visualization::DrawCross(robot_rel_goal, .3, 0x239847, local_viz_msg_);
+  // visualization::DrawCross(robot_rel_goal, .3, 0x239847, local_viz_msg_);
 
   // curvature options from right to left
   // max curvature is 1
@@ -334,8 +334,8 @@ PathOption Navigation::pick_arc() {
     );
 
     // uncomment for debugging
-    //visualization::DrawCross(opt_fpl_cutoff, .3, 0xab4865, local_viz_msg_);
-    visualization::DrawLine(robot_rel_goal, opt_fpl_cutoff, 0, local_viz_msg_);
+    visualization::DrawCross(opt_fpl_cutoff, .3, 0xab4865, local_viz_msg_);
+    // visualization::DrawLine(robot_rel_goal, opt_fpl_cutoff, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
     for (Vector2f point : point_cloud_) {
@@ -351,7 +351,8 @@ PathOption Navigation::pick_arc() {
       double r_1 = radius - w;
       double r_2 = magnitude(radius + w, h);
       double theta = atan2(eval_point.x(), radius - eval_point.y());
-      double phi = (theta - atan2(h, radius - w));
+      double omega = atan2(h, radius - w);
+      double phi = (theta - omega);
 
       // just some debuggin code
       // Eigen::Affine2f a_center_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(theta);
@@ -371,7 +372,9 @@ PathOption Navigation::pick_arc() {
         // TODO: set the point to cutoff the path to whatever point is associated with our chosen fpl.
         temp_fpl = min(obstructed_fpl, optimal_fpl);
 
-        Eigen::Vector2f end_of_obstructed_path(radius * cos(theta), w);
+        
+        // We know r_1, we have radius, we have the angle between them, we just don't know the x coord. of the end of the fpl.
+        Eigen::Vector2f end_of_obstructed_path(radius * cos(theta), r_1);
         
         Eigen::Vector2f end_of_path = (temp_fpl == optimal_fpl) ? opt_fpl_cutoff : end_of_obstructed_path;
 
@@ -390,7 +393,7 @@ PathOption Navigation::pick_arc() {
 
         // the current closest point with which to judge clearance is either
         // less than r1 or greater than r2
-        double temp_clear = (mag < r_1) ? r_1 - mag  : mag - r_2;
+        double temp_clear = (mag < r_1) ? abs(r_1 - mag)  : abs(mag - r_2);
         
         if (temp_clear < path_i.clearance)
           path_i.clearance = temp_clear;
