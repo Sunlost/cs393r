@@ -373,6 +373,12 @@ PathOption Navigation::pick_arc() {
       }
 
       // alternative if placement a la Macy
+      // visualization::DrawPathOption(path_i.curvature,
+      //                         path_i.free_path_length,
+      //                         path_i.clearance,
+      //                         0,
+      //                         false,
+      //                         local_viz_msg_);
     }
 
     // We want feasible paths only.
