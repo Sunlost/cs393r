@@ -243,7 +243,7 @@ void Navigation::Run() {
   }
 
   cycle_num++;
-  printf("\nCycle Num: %d\n", cycle_num);
+  printf("\nCycle Num: %ld\n", cycle_num);
 
   // handle 1d toc
   toc1dstraightline();
