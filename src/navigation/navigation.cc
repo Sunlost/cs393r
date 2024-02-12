@@ -284,21 +284,22 @@ PathOption Navigation::pick_arc() {
   // if (debug_print) printf("robot_loc %f %f\n", robot_loc_.x(), robot_loc_.y());
   // if (debug_print) printf("robot_angle %f\n\n", robot_angle_ );
 
-  double map_car_angle_diff = odom_angle_ - odom_start_angle_;
-  Eigen::Vector2f map_car_loc_diff(odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
+  // double map_car_angle_diff = odom_angle_ - odom_start_angle_;
+  // Eigen::Vector2f map_car_loc_diff(odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
   // +ve x is forward for robot, +ve y is left
   // +ve angle rot. is to robot's left.
   
-  Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle_diff);
+  // Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle_diff);
   //Eigen::Affine2f a_map_robot = Eigen::Translation2f(-abs(map_car_loc_diff.x()) , -abs(map_car_loc_diff.y())) * Eigen::Rotation2Df(-map_car_angle_diff);
 
   // We want to zero out the point
-  Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
+  //Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
+  Eigen::Vector2f robot_rel_goal = map_goal;
 
-  // uncomment for debugging - I need to figure out how to set a nav target
   // visualization::DrawCross(robot_rel_goal, .3, 0x239847, local_viz_msg_);
 
   // curvature options from right to left
+  // -ve y is the right direction, +ve y is the left direction
   // max curvature is 1
   for(double i = -1; i <= 1; i += 0.1) {
 
@@ -312,17 +313,8 @@ PathOption Navigation::pick_arc() {
     double goal_mag = magnitude(robot_rel_goal.x() - center.x(), robot_rel_goal.y() - center.y());
     bool mirrored = false;
 
-
-    // -ve x is the right direction, +ve x is the left direction
-
-    // If we reflect the arcs we want into the other side, we need to reflect
-    // the point cloud as well to make sure we are still using the rights points
-    // with our "correct"/"right" calculations
-
     // fpl = f(c, p) if c > 0
-    // fpl = f(-c, Mirrored(p)) if c < 0, we flip our curve back into the +ve, 
-    // but make sure to give it the new points to work with
-    // but make sure to flip it so the math is a bit more stable 
+    // fpl = f(-c, Mirrored(p)) if c < 0, we flip our curve back into the +ve, and flip points in cloud y
     if (radius < 0.0) {
       mirrored = true;
       radius = -1 * radius; 
@@ -334,7 +326,7 @@ PathOption Navigation::pick_arc() {
     );
 
     // uncomment for debugging
-    visualization::DrawCross(opt_fpl_cutoff, .3, 0xab4865, local_viz_msg_);
+    // visualization::DrawCross(opt_fpl_cutoff, .3, 0xab4865, local_viz_msg_);
     // visualization::DrawLine(robot_rel_goal, opt_fpl_cutoff, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
@@ -347,39 +339,30 @@ PathOption Navigation::pick_arc() {
       if (mirrored) eval_point.y() = -1 * point.y();
 
       // now the math should work as we know it should.
-      double mag = magnitude(eval_point.x() - center.x(), eval_point.y() - center.y());
       double r_1 = radius - w;
       double r_2 = magnitude(radius + w, h);
-      double theta = atan2(eval_point.x(), radius - eval_point.y());
       double omega = atan2(h, radius - w);
+      double mag = magnitude(eval_point.x() - center.x(), eval_point.y() - center.y());
+      double theta = atan2(eval_point.x(), radius - eval_point.y());
       double phi = (theta - omega);
 
-      // just some debuggin code
-      // Eigen::Affine2f a_center_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(theta);
-      // Vector2f sanity_check_eval_point = a_center_robot * eval_point;
-      // if (debug_print) printf("point loc vs. math: %f, %f vs. %f, %f \n", eval_point.x(), eval_point.y(), sanity_check_eval_point.x(), sanity_check_eval_point.y() );
-
+      // We know r_1, we have radius, we have the angle between them, we just don't know the x coord. of the end of the fpl.
+      Eigen::Vector2f end_of_obstructed_path(radius * cos(theta), r_1);
+      
       // this point is an obstruction for this path
       if ((mag >= r_1 && mag <= r_2) && theta > 0) {
-        // TODO:: make sure to use right point if mirrored
-        // path_i.obstruction.x() = (mirrored) ? -1 * eval_point.x() : eval_point.x();
-        // path_i.obstruction.y() = eval_point.y();
-        //double optimal_theta = atan2(opt_fpl_cutoff.x(), radius - opt_fpl_cutoff.y());
 
         // check the optimal fpl math.
         double obstructed_fpl = radius * phi; //need to find where this point is in the graph
         double optimal_fpl = (2 * radius) * asin(magnitude(opt_fpl_cutoff.x(), opt_fpl_cutoff.y()) / (2 * radius));
         // TODO: set the point to cutoff the path to whatever point is associated with our chosen fpl.
         temp_fpl = min(obstructed_fpl, optimal_fpl);
-
-        
-        // We know r_1, we have radius, we have the angle between them, we just don't know the x coord. of the end of the fpl.
-        Eigen::Vector2f end_of_obstructed_path(radius * cos(theta), r_1);
         
         Eigen::Vector2f end_of_path = (temp_fpl == optimal_fpl) ? opt_fpl_cutoff : end_of_obstructed_path;
 
         if (temp_fpl < path_i.free_path_length) {
           path_i.free_path_length = temp_fpl; 
+          // have to flip the stored point back into its place
           path_i.closest_point.y() = (mirrored) ? -1 * end_of_path.y() : end_of_path.y();
           path_i.closest_point.x() = end_of_path.x();
           path_i.obstruction = point;
@@ -403,7 +386,7 @@ PathOption Navigation::pick_arc() {
 
     // We want feasible paths only.
     if (path_i.free_path_length == INFINITY) {
-      path_i.free_path_length = map_goal.x(); // TODO need to account for current remaining distance
+      path_i.free_path_length = map_goal.x(); // TODO need to account for current remaining distance?
     }
     if (path_i.free_path_length > 0) {
       path_options.push_back(path_i);
@@ -422,13 +405,18 @@ PathOption Navigation::pick_arc() {
                                   false,
                                   local_viz_msg_);
 
+    visualization::DrawCross(path_options.at(i).closest_point, .3, 0xab0065, local_viz_msg_);
+
     // calculate clearance around obstacle
     // use robot_rel_goal and opt_fpl_cutoff
-    double dtgoal =  magnitude(robot_rel_goal.x() - path_options.at(i).closest_point.x(), 
-                               robot_rel_goal.y() - path_options.at(i).closest_point.y());
-    path_score = (path_options.at(i).clearance * 1000) + (path_options.at(i).free_path_length)  + (dtgoal * 2);
+    double dtgoal = magnitude(robot_rel_goal.x() - path_options.at(i).closest_point.x(), 
+                              robot_rel_goal.y() - path_options.at(i).closest_point.y());
+    path_score = (path_options.at(i).clearance * 150) + (path_options.at(i).free_path_length)  + (dtgoal * 2);
 
-    if (debug_print) printf("Arc %d, curvature = %f, fpl = %f, clearance = %f, dtg = %f \n", i, path_options.at(i).curvature, path_options.at(i).free_path_length, path_options.at(i).clearance, dtgoal);
+    if (debug_print) {
+       printf("Arc %d, curvature = %f, fpl = %f, clearance = %f, dtg = %f, closest point = %f, %f\n", 
+       i, path_options.at(i).curvature, path_options.at(i).free_path_length, path_options.at(i).clearance, dtgoal, path_options.at(i).closest_point.x(), path_options.at(i).closest_point.y());
+    }
     // if (dtgoal < 0.00001) {
     //   //if (debug_print) printf("/n dtgoal = %f\n", dtgoal);
     //   return empty;
@@ -445,6 +433,7 @@ PathOption Navigation::pick_arc() {
   if (debug_print) printf("\nAt the end of Pick Arc\n");
   if (debug_print) printf("Previous Score %f\n", prev_score);
   if (debug_print) printf("Current Score %f, Arc %d \n\n", best_path_score, best_path_id);
+
   if (prev_path_id == best_path_id) {
     return empty;
   } else {
