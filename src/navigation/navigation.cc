@@ -86,7 +86,7 @@ Vector2f prev_loc;
 SimpleQueue<uint64_t, float, float> toc_queue;
 uint8_t toc_queue_size;
 
-bool debug_print;
+bool debug_print; //maybe should make separate flags for convenience.
 
 } //namespace
 
@@ -304,27 +304,37 @@ PathOption Navigation::pick_arc() {
 
     PathOption path_i = PathOption();
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
-    path_i.free_path_length = 100; // init to some high value
-    path_i.clearance = 1000;
+    path_i.free_path_length = INFINITY; // init to some high value
+    path_i.clearance = INFINITY;
     path_i.curvature = i; 
     
     Eigen::Vector2f center(0, radius); // right = negative value
     double goal_mag = magnitude(robot_rel_goal.x() - center.x(), robot_rel_goal.y() - center.y());
     bool mirrored = false;
 
+
+    // -ve x is the right direction, +ve x is the left direction
+
+    // If we reflect the arcs we want into the other side, we need to reflect
+    // the point cloud as well to make sure we are still using the rights points
+    // with our "correct"/"right" calculations
+
+    // fpl = f(c, p) if c > 0
+    // fpl = f(-c, Mirrored(p)) if c < 0, we flip our curve back into the +ve, 
+    // but make sure to give it the new points to work with
+    // but make sure to flip it so the math is a bit more stable 
     if (radius < 0.0) {
       mirrored = true;
       radius = -1 * radius; 
     } 
 
-    // double check?
     Eigen::Vector2f opt_fpl_cutoff(
       center.x() + (robot_rel_goal.x() - center.x()) / goal_mag * radius,
       center.y() + (robot_rel_goal.y() - center.y()) / goal_mag * radius
     );
 
     // uncomment for debugging
-    visualization::DrawCross(opt_fpl_cutoff, .3, 0xab4865, local_viz_msg_);
+    //visualization::DrawCross(opt_fpl_cutoff, .3, 0xab4865, local_viz_msg_);
     visualization::DrawLine(robot_rel_goal, opt_fpl_cutoff, 0, local_viz_msg_);
 
     // check for potential collisions with all points in the point cloud
@@ -333,20 +343,8 @@ PathOption Navigation::pick_arc() {
       // visualization::DrawPoint(point, 0xB92348, local_viz_msg_);
       Eigen::Vector2f eval_point(point.x(), point.y());
 
-      // -ve x is the right direction, +ve x is the left direction
-      // remains the same as the mathemetical convention
-      // what do we need magnitude for, what do we need direction for
-      // lengths, for comparisons          everything else
-
-      // If we reflect the arcs we want into the other side, we need to reflect
-      // the point cloud as well to make sure we are still using the rights points
-      // with our "correct"/"right" calculations
-
-      // fpl = f(c, p) if c > 0
-      // fpl = f(-c, Mirrored(p)) if c < 0, we flip our curve back into the +ve, 
-      // but make sure to give it the new points to work with
-      // but make sure to flip it so the math is a bit more stable 
-      if (radius < 0.0) eval_point.x() = -1 * point.x();
+      // flip the point cloud across the x axis
+      if (mirrored) eval_point.y() = -1 * point.y();
 
       // now the math should work as we know it should.
       double mag = magnitude(eval_point.x() - center.x(), eval_point.y() - center.y());
@@ -369,17 +367,18 @@ PathOption Navigation::pick_arc() {
 
         // check the optimal fpl math.
         double obstructed_fpl = radius * phi; //need to find where this point is in the graph
-        // realllly oughta double check this math
         double optimal_fpl = (2 * radius) * asin(magnitude(opt_fpl_cutoff.x(), opt_fpl_cutoff.y()) / (2 * radius));
         // TODO: set the point to cutoff the path to whatever point is associated with our chosen fpl.
         temp_fpl = min(obstructed_fpl, optimal_fpl);
 
-
+        Eigen::Vector2f end_of_obstructed_path(radius * cos(theta), w);
+        
+        Eigen::Vector2f end_of_path = (temp_fpl == optimal_fpl) ? opt_fpl_cutoff : end_of_obstructed_path;
 
         if (temp_fpl < path_i.free_path_length) {
           path_i.free_path_length = temp_fpl; 
-          path_i.closest_point.x() = (mirrored) ? -1 * opt_fpl_cutoff.x() : opt_fpl_cutoff.x();
-          path_i.closest_point.y() = eval_point.y();
+          path_i.closest_point.y() = (mirrored) ? -1 * end_of_path.y() : end_of_path.y();
+          path_i.closest_point.x() = end_of_path.x();
           path_i.obstruction = point;
         }
 
