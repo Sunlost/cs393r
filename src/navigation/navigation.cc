@@ -410,7 +410,8 @@ PathOption Navigation::pick_arc() {
                                robot_rel_goal.y() - path_options.at(i).closest_point.y());
     arc_score = (path_options.at(i).clearance * 100) + (path_options.at(i).free_path_length)  + (dtgoal * 2);
 
-    printf("Arc %d, curvature = %f, fpl = %f, clearance = %f \n", i, path_options.at(i).curvature, path_options.at(i).free_path_length, path_options.at(i).clearance);
+    printf("Arc %d, curvature = %f, fpl = %f, clearance = %f, dtg = %f, closest point = %f, %f\n", 
+       i, path_options.at(i).curvature, path_options.at(i).free_path_length, path_options.at(i).clearance, dtgoal, path_options.at(i).closest_point.x(), path_options.at(i).closest_point.y());
 
     //printf("dtgoal = %f\n", dtgoal);
     // if (dtgoal <= 0.00001) {
