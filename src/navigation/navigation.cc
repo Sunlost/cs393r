@@ -160,7 +160,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   prev_loc = Vector2f(0, 0);
   toc_queue_size = 1; // assume 0.15s latency @ 0.05s/cycle = 3 cycles
 
-  debug_print = true;
+  debug_print = false;
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -221,7 +221,6 @@ void Navigation::Run() {
   if (debug_print) printf("chosen path's optimal cutoff %f, %f\n", curr_path.closest_point.x(), curr_path.closest_point.y());
   if (debug_print) printf("chosen path's obstruction %f, %f\n\n", curr_path.obstruction.x(), curr_path.obstruction.y());
 
-  // drive_msg_.velocity = 1.0;
   // predict current position, odometry
   position_prediction();
 
@@ -257,6 +256,7 @@ void Navigation::Run() {
   drive_pub_.publish(drive_msg_);
 }
 
+/* calculate magnitude */
 float magnitude(float x, float y) {
   return sqrt(pow(x, 2) + pow(y, 2));
 }
@@ -269,7 +269,6 @@ PathOption Navigation::pick_arc() {
   float path_score = 0.0; 
   float best_path_score = -1;
   unsigned best_path_id = 0;
-  // float clearance = 0.0;
   double temp_fpl = INFINITY;
   Vector2f temp_endpt(INFINITY, INFINITY);
   vector<double> curves;
@@ -277,49 +276,25 @@ PathOption Navigation::pick_arc() {
   PathOption best_path_option = PathOption();
   best_path_option.free_path_length = INFINITY;
 
-  // need to take the map goal, turn it into robot relative goal
-  //        distance to the dest. frame         angle needed to go from src x-axis frame to dest. x-axis frame
-  // we also have to translate the point closer to the robot based off of how far we have traveled.
-  // if (debug_print) printf("\nOdom_start_loc %f %f\n", odom_start_loc_.x(), odom_start_loc_.y());
-  // if (debug_print) printf("Odom_loc %f %f\n", odom_loc_.x(), odom_loc_.y());
-  // if (debug_print) printf("Odom_loc \"zeroed\" %f %f\n", odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
-  // if (debug_print) printf("Odom_angle %f\n", odom_angle_);
-  // if (debug_print) printf("Odom_angle \"zeroed\" %f\n", odom_angle_ - odom_start_angle_);
-  // if (debug_print) printf("robot_loc %f %f\n", robot_loc_.x(), robot_loc_.y());
-  // if (debug_print) printf("robot_angle %f\n\n", robot_angle_ );
-
-  // double map_car_angle = odom_angle_ - odom_start_angle_;
-  // Eigen::Vector2f map_car_loc(odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
-  // double x_distance = magnitude(map_car_loc - odom_start_loc_, float y);
-  // // +ve x is forward for robot, +ve y is left
-  // // +ve angle rot. is to robot's left.
-  
-  // // Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle);
-  // Eigen::Affine2f a_map_robot = Eigen::Translation2f(+ -abs(map_car_loc.x()) , -abs(map_car_loc.y())) * Eigen::Rotation2Df(-map_car_angle);
-
-  // //We want to zero out the point
-  // Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
   Eigen::Vector2f robot_rel_goal = map_goal;
-
-  // visualization::DrawCross(robot_rel_goal, .3, 0x239847, local_viz_msg_);
 
   // curvature options from right to left
   // -ve y is the right direction, +ve y is the left direction
   // max curvature is 1
 
   for(double i = -1; i <= 1; i += 0.1) {
-    bool curved = abs(i) != 0.0; //theta math must be avoided to ensure accuracy of closest point to goal
     bool mirrored = false;
 
     PathOption path_i = PathOption();
     double radius = 1 / (i + 1e-6); // adding small value to account for 0 curvature
 
+    // calculate all arcs based on positive curvature
     if (radius < 0.0) {
       mirrored = true;
       radius = -1 * radius; 
     } 
 
-    Eigen::Vector2f center(0, radius); // right = negative value
+    Eigen::Vector2f center(0, radius);
     double goal_mag = magnitude(robot_rel_goal.x() - center.x(), robot_rel_goal.y() - center.y());
 
     // fpl = f(c, p) if c > 0
@@ -328,16 +303,14 @@ PathOption Navigation::pick_arc() {
     // Straight path init vals
     Eigen::Vector2f optimal_endpt(robot_rel_goal.x(), 0);
     path_i.free_path_length = robot_rel_goal.x();
-    if (curved) {
-      // path is curved.
-      optimal_endpt.x() = center.x() + (robot_rel_goal.x() - center.x()) / goal_mag * radius;
-      optimal_endpt.y() = center.y() + (robot_rel_goal.y() - center.y()) / goal_mag * radius;
-      path_i.free_path_length = (2 * radius) * asin(magnitude(optimal_endpt.x(), optimal_endpt.y()) / (2 * radius)); // init to some high value
-    } 
+    // path is curved.
+    optimal_endpt.x() = center.x() + (robot_rel_goal.x() - center.x()) / goal_mag * radius;
+    optimal_endpt.y() = center.y() + (robot_rel_goal.y() - center.y()) / goal_mag * radius;
+    path_i.free_path_length = (2 * radius) * asin(magnitude(optimal_endpt.x(), optimal_endpt.y()) / (2 * radius)); // init to some high value
     path_i.clearance = INFINITY;
     path_i.curvature = i; 
 
-    // uncomment for debugging
+    // uncomment for debugging goal
     // visualization::DrawCross(optimal_endpt, .3, 0xab4865, local_viz_msg_);
     // visualization::DrawLine(robot_rel_goal, optimal_endpt, 0, local_viz_msg_);
 
@@ -351,56 +324,51 @@ PathOption Navigation::pick_arc() {
       if (mirrored) eval_point.y() = -1 * point.y();
 
       // now the math should work as we know it should, for curves
-      if (curved) {
-        double r_1 = radius - w;
-        double r_2 = magnitude(radius + w, h);
-        double omega = atan2(h, radius - w);
-        double mag = magnitude(eval_point.x() - center.x(), eval_point.y() - center.y());
-        double theta = atan2(eval_point.x(), radius - eval_point.y());
-        double phi = (theta - omega);
+      double r_1 = radius - w;
+      double r_2 = magnitude(radius + w, h);
+      double omega = atan2(h, radius - w);
+      double mag = magnitude(eval_point.x() - center.x(), eval_point.y() - center.y());
+      double theta = atan2(eval_point.x(), radius - eval_point.y());
+      double phi = (theta - omega);
 
-        // rotate r from (0,r) by phi radians to find the endpoint
-        Eigen::Affine2f rotate_phi = Eigen::Translation2f(0, radius) * Eigen::Rotation2Df(phi);
-        Eigen::Vector2f circle_center(0, -radius);
-        Eigen::Vector2f obstructed_endpt = rotate_phi * circle_center; // this wrong, need to use affines.
-        // if (mirrored) obstructed_endpt.y() = -1 * obstructed_endpt.y();
-        // if (mirrored) optimal_endpt.y() = -1 * optimal_endpt.y();
-        // this point is an obstruction for this path
-        if ((mag >= r_1 && mag <= r_2) && theta > 0) {
-          // check the optimal fpl math.
-          double obstructed_fpl = radius * phi; // need to find where this point is in the graph
-          Eigen::Affine2f translate_center = Eigen::Translation2f(0, -radius) * Eigen::Rotation2Df(0);
-          Eigen::Vector2f center_optimal_endpt = translate_center * optimal_endpt;
-          double optimal_central_angle = abs(atan(center_optimal_endpt.x() / center_optimal_endpt.y()));
-          double optimal_fpl = optimal_central_angle * radius;
-          // Values are identical as far as I can tell with the below and above.
-          // double optimal_fpl = (2 * radius) * asin(magnitude(optimal_endpt.x(), optimal_endpt.y()) / (2 * radius));
+      // rotate r from (0,r) by phi radians to find the endpoint
+      Eigen::Affine2f rotate_phi = Eigen::Translation2f(0, radius) * Eigen::Rotation2Df(phi);
+      Eigen::Vector2f circle_center(0, -radius);
+      Eigen::Vector2f obstructed_endpt = rotate_phi * circle_center; // this wrong, need to use affines.
 
-          if (obstructed_fpl < optimal_fpl) {
-            temp_fpl = obstructed_fpl;
-            temp_endpt = obstructed_endpt;
-          } else {
-            temp_fpl = optimal_fpl;
-            temp_endpt = optimal_endpt;
-          }
+      // this point is an obstruction for this path
+      if ((mag >= r_1 && mag <= r_2) && theta > 0) {
+        // check the optimal fpl math.
+        double obstructed_fpl = radius * phi;
+        Eigen::Affine2f translate_center = Eigen::Translation2f(0, -radius) * Eigen::Rotation2Df(0);
+        Eigen::Vector2f center_optimal_endpt = translate_center * optimal_endpt;
+        double optimal_central_angle = abs(atan(center_optimal_endpt.x() / center_optimal_endpt.y()));
+        double optimal_fpl = optimal_central_angle * radius;
 
-          // if (mirrored) visualization::DrawCross(Eigen::Vector2f (temp_endpt.x(), -1 * temp_endpt.y()), .1, 0xFF0000, local_viz_msg_);
-          // else visualization::DrawCross(Eigen::Vector2f (temp_endpt.x(), temp_endpt.y()), .1, 0xFF0000, local_viz_msg_);
-
-          if (temp_fpl < path_i.free_path_length) {
-            path_i.free_path_length = min(path_i.free_path_length, temp_fpl); // need to do same 3 way min for end of path
-            temp_endpt.y() = (mirrored) ? -1 * temp_endpt.y() : temp_endpt.y();
-            path_i.closest_point = temp_endpt;
-            path_i.obstruction = point;
-          }
+        // truncate free path length if necessary
+        if (obstructed_fpl < optimal_fpl) {
+          temp_fpl = obstructed_fpl;
+          temp_endpt = obstructed_endpt;
+        } else {
+          temp_fpl = optimal_fpl;
+          temp_endpt = optimal_endpt;
         }
-        else if((mag < r_1 || mag > r_2) && theta > 0) { 
-          double temp_clear = (mag < r_1) ? abs(r_1 - mag)  : abs(mag - r_2);
-          if (temp_clear > clearance_cap) 
-            temp_clear = clearance_cap;
-          if (temp_clear < path_i.clearance)
-            path_i.clearance = temp_clear;
+
+        if (temp_fpl < path_i.free_path_length) {
+          path_i.free_path_length = min(path_i.free_path_length, temp_fpl); // need to do same 3 way min for end of path
+          temp_endpt.y() = (mirrored) ? -1 * temp_endpt.y() : temp_endpt.y();
+          path_i.closest_point = temp_endpt;
+          path_i.obstruction = point;
         }
+      }
+      // calculate clearance
+      else if((mag < r_1 || mag > r_2) && theta > 0) { 
+        // handle negative clearance values? as is mentioned on the slide
+        double temp_clear = (mag < r_1) ? abs(r_1 - mag)  : abs(mag - r_2);
+        if (temp_clear > clearance_cap) 
+          temp_clear = clearance_cap; // set clearance to c_max because we don't care at some point
+        if (temp_clear < path_i.clearance)
+          path_i.clearance = temp_clear;
       }
     }
 
@@ -411,7 +379,6 @@ PathOption Navigation::pick_arc() {
   if (debug_print) printf("\nIn Pick Arc, feasible arcs\n");
   
   for(unsigned i = 0; i < path_options.size(); i++) {
-    // //uncomment for debugging, shouldn't be changing how the arcs are looking.
     visualization::DrawPathOption(path_options.at(i).curvature,
                                   path_options.at(i).free_path_length,
                                   path_options.at(i).clearance,
@@ -420,23 +387,17 @@ PathOption Navigation::pick_arc() {
                                   local_viz_msg_);
 
     visualization::DrawCross(path_options.at(i).closest_point, .3, 0xab0065, local_viz_msg_);
-    // visualization::DrawCross(path_options.at(i).obstruction, .3, 0xab0065, local_viz_msg_);
-    // calculate clearance around obstacle
+
     // use robot_rel_goal and optimal_endpt
     double dtgoal = magnitude(robot_rel_goal.x() - path_options.at(i).closest_point.x(), 
                               robot_rel_goal.y() - path_options.at(i).closest_point.y());
 
-    // We could really make this super effective if we could get te 
-    path_score = (path_options.at(i).clearance * 15) + (path_options.at(i).free_path_length)  + (dtgoal * -0.1);
+    path_score = (path_options.at(i).clearance * 15) + (path_options.at(i).free_path_length)  + (dtgoal * .01);
 
     if (debug_print) {
        printf("Arc %d, curvature = %f, fpl = %f, clearance = %f, dtg = %f, closest point = %f, %f\n", 
        i, path_options.at(i).curvature, path_options.at(i).free_path_length, path_options.at(i).clearance, dtgoal, path_options.at(i).closest_point.x(), path_options.at(i).closest_point.y());
     }
-    // if (dtgoal < 0.00001) {
-    //   //if (debug_print) printf("/n dtgoal = %f\n", dtgoal);
-    //   return empty;
-    // }
 
     if (path_score > best_path_score) {
       best_path_id = i;
