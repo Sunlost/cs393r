@@ -143,7 +143,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   d_max = 3.65;
 
   // max velocity: 1.0 m/s
-  v_max = .5;
+  v_max = 1.0;
   // max acceleration: 4.0 m/s^2
   a_max = 4.0;
   // max deceleration: 4.0 m/s^2
@@ -427,7 +427,7 @@ PathOption Navigation::pick_arc() {
                               robot_rel_goal.y() - path_options.at(i).closest_point.y());
 
     // We could really make this super effective if we could get te 
-    path_score = (path_options.at(i).clearance * 15) + (path_options.at(i).free_path_length)  + (dtgoal * .01);
+    path_score = (path_options.at(i).clearance * 15) + (path_options.at(i).free_path_length)  + (dtgoal * -0.1);
 
     if (debug_print) {
        printf("Arc %d, curvature = %f, fpl = %f, clearance = %f, dtg = %f, closest point = %f, %f\n", 
