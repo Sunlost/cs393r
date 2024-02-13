@@ -95,7 +95,6 @@ void LaserCallback(const sensor_msgs::LaserScan& msg) {
   // msg.range_max // Maximum observable range
   // msg.range_min // Minimum observable range
   // msg.ranges[i] // The range of the i'th ray
-  printf("\nLaser is updating, new point cloud\n");
 
   point_cloud_.clear();
   for (size_t i = 0; i < msg.ranges.size(); i++) {

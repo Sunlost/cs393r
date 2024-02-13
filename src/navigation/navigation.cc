@@ -160,7 +160,7 @@ Navigation::Navigation(const string& map_name, ros::NodeHandle* n) :
   prev_loc = Vector2f(0, 0);
   toc_queue_size = 1; // assume 0.15s latency @ 0.05s/cycle = 3 cycles
 
-  debug_print = false;
+  debug_print = true;
 }
 
 void Navigation::SetNavGoal(const Vector2f& loc, float angle) {
@@ -243,7 +243,6 @@ void Navigation::Run() {
   }
 
   cycle_num++;
-  printf("\nCycle Num: %ld\n", cycle_num);
 
   // handle 1d toc
   toc1dstraightline();
@@ -290,13 +289,13 @@ PathOption Navigation::pick_arc() {
   // if (debug_print) printf("robot_angle %f\n\n", robot_angle_ );
 
   // double map_car_angle = odom_angle_ - odom_start_angle_;
-  // Eigen::Vector2f map_car_loc_diff(odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
-  // double x_distance
+  // Eigen::Vector2f map_car_loc(odom_loc_.x() - odom_start_loc_.x(), odom_loc_.y() - odom_start_loc_.y());
+  // double x_distance = magnitude(map_car_loc - odom_start_loc_, float y);
   // // +ve x is forward for robot, +ve y is left
   // // +ve angle rot. is to robot's left.
   
   // // Eigen::Affine2f a_map_robot = Eigen::Translation2f(0, 0) * Eigen::Rotation2Df(-map_car_angle);
-  // Eigen::Affine2f a_map_robot = Eigen::Translation2f(+ -abs(map_car_loc_diff.x()) , -abs(map_car_loc_diff.y())) * Eigen::Rotation2Df(-map_car_angle);
+  // Eigen::Affine2f a_map_robot = Eigen::Translation2f(+ -abs(map_car_loc.x()) , -abs(map_car_loc.y())) * Eigen::Rotation2Df(-map_car_angle);
 
   // //We want to zero out the point
   // Eigen::Vector2f robot_rel_goal = a_map_robot * map_goal;
@@ -307,10 +306,6 @@ PathOption Navigation::pick_arc() {
   // curvature options from right to left
   // -ve y is the right direction, +ve y is the left direction
   // max curvature is 1
-
-  // for(double i = -1; i <= 1; i += 0.1) {
-  //   curves.push_back(i);
-  // }
 
   for(double i = -1; i <= 1; i += 0.1) {
     bool curved = abs(i) != 0.0; //theta math must be avoided to ensure accuracy of closest point to goal
