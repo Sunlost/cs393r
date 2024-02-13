@@ -101,7 +101,7 @@ PathOption curr_path;
 double curr_score;
 unsigned curr_path_id;
 
-const double safety_margin = .1;
+const double safety_margin = .05;
 const double h = 0.4295 + safety_margin;
 const double w = (0.281 / 2) + safety_margin;
 const Eigen::Vector2f map_goal(20, 0);
